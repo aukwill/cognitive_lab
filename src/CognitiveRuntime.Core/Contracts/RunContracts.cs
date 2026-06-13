@@ -9,13 +9,32 @@ public sealed record RunRequest(
     string? InputSource = null,
     string? Lens = null);
 
+/// <summary>
+/// The terminal outcome of a run. The runtime, not the model, decides this
+/// value.
+/// </summary>
+public enum RunOutcome
+{
+    /// <summary>The run completed and its evaluation passed.</summary>
+    Success,
+
+    /// <summary>The run completed but its evaluation failed.</summary>
+    EvalFailed,
+
+    /// <summary>The run did not complete due to a runtime or provider failure.</summary>
+    RuntimeFailed,
+
+    /// <summary>The run was cancelled before it completed.</summary>
+    Cancelled
+}
+
 public sealed record RunResult(
     string RunId,
     string OutputDirectory,
     string ResultPath,
     string TracePath,
     string EvalReportPath,
-    bool EvalPassed,
+    RunOutcome Outcome,
     string? HtmlViewPath = null);
 
 public enum ArtifactKind

@@ -45,20 +45,20 @@ internal sealed class CliApplication
             Console.Error.WriteLine(exception.Message);
             Console.Error.WriteLine();
             WriteHelp(Console.Error);
-            return 2;
+            return ExitCodes.UsageError;
         }
 
         if (options.ShowHelp)
         {
             WriteHelp(Console.Out);
-            return 0;
+            return ExitCodes.Success;
         }
 
         if (!File.Exists(options.InputPath))
         {
             Console.Error.WriteLine(
                 $"Input file '{options.InputPath}' does not exist.");
-            return 2;
+            return ExitCodes.UsageError;
         }
 
         var services = BuildServices(options, configuration);
@@ -80,17 +80,17 @@ internal sealed class CliApplication
             Console.Error.WriteLine(exception.Message);
             Console.Error.WriteLine(
                 $"Partial artifacts: {exception.OutputDirectory}");
-            return 1;
+            return ExitCodes.FromOutcome(RunOutcome.RuntimeFailed);
         }
         catch (OperationCanceledException)
         {
             Console.Error.WriteLine("Run cancelled.");
-            return 130;
+            return ExitCodes.FromOutcome(RunOutcome.Cancelled);
         }
         catch (Exception exception)
         {
             Console.Error.WriteLine($"Fatal error: {exception.Message}");
-            return 1;
+            return ExitCodes.FromOutcome(RunOutcome.RuntimeFailed);
         }
     }
 
@@ -117,13 +117,14 @@ internal sealed class CliApplication
 
         Console.WriteLine($"Run ID: {result.RunId}");
         Console.WriteLine($"Output: {result.OutputDirectory}");
-        Console.WriteLine($"Evaluation: {(result.EvalPassed ? "PASS" : "FAIL")}");
+        Console.WriteLine(
+            $"Evaluation: {(result.Outcome == RunOutcome.Success ? "PASS" : "FAIL")}");
         if (result.HtmlViewPath is not null)
         {
             Console.WriteLine($"HTML: {result.HtmlViewPath}");
         }
 
-        return result.EvalPassed ? 0 : 3;
+        return ExitCodes.FromOutcome(result.Outcome);
     }
 
     private static ServiceCollection BuildServices(

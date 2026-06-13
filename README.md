@@ -88,6 +88,23 @@ post-run work was persisted. `run.failed` is the single terminal failure event
 and follows best-effort required failure artifacts. A trace does not contain
 both terminal outcomes.
 
+## Lenses
+
+The `lens` mode explains a concept by mapping it onto a hobby the reader
+already has intuition for. Unlike other modes, it has no default prompt set;
+`--lens <name>` selects which `modes/lens/prompts/<name>/` directory supplies
+the main, critic, and revision prompts. `mode.json`, `MODE.md`, and the output
+contract are shared by every lens.
+
+```text
+dotnet run --project src/CognitiveRuntime.Cli -- --mode lens --lens warcraft --input examples/agent_runtime_goal.txt --run-mode mock --html
+```
+
+Adding a hobby lens means adding three prompt files under
+`modes/lens/prompts/<name>/` — no runtime code changes are required. See
+[`modes/lens/MODE.md`](modes/lens/MODE.md) for the contract each lens prompt
+set must satisfy.
+
 ## Model Providers
 
 The default provider is `mock`. It is deterministic and requires no credentials.

@@ -42,7 +42,7 @@ public sealed class RevisionLoopIntegrationTests
                 "mock",
                 workspace.OutputRoot));
 
-        Assert.True(result.EvalPassed);
+        Assert.Equal(RunOutcome.Success, result.Outcome);
         var resultMarkdown = await File.ReadAllTextAsync(result.ResultPath);
         Assert.Contains("## Authoritative Revision", resultMarkdown);
         Assert.All(
@@ -68,7 +68,7 @@ public sealed class RevisionLoopIntegrationTests
                 modelClient.ProviderName,
                 workspace.OutputRoot));
 
-        Assert.True(result.EvalPassed);
+        Assert.Equal(RunOutcome.Success, result.Outcome);
         Assert.Collection(
             modelClient.Requests,
             main => Assert.Empty(main.PriorPhaseResults),
@@ -188,7 +188,7 @@ public sealed class RevisionLoopIntegrationTests
                 modelClient.ProviderName,
                 workspace.OutputRoot));
 
-        Assert.False(result.EvalPassed);
+        Assert.Equal(RunOutcome.EvalFailed, result.Outcome);
         AssertRequiredArtifactsExist(result.OutputDirectory);
         var evalMarkdown = await File.ReadAllTextAsync(result.EvalReportPath);
         Assert.Contains("Overall: **FAIL**", evalMarkdown);

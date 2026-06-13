@@ -210,7 +210,7 @@ public sealed class Orchestrator
                 artifacts.ResultPath,
                 artifacts.TracePath,
                 artifacts.EvalReportPath,
-                evalReport.Passed,
+                evalReport.Passed ? RunOutcome.Success : RunOutcome.EvalFailed,
                 htmlViewPath);
         }
         catch (Exception exception) when (exception is not RuntimeRunException)

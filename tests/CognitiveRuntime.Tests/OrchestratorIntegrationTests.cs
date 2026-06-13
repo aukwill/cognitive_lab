@@ -31,7 +31,7 @@ public sealed class OrchestratorIntegrationTests
                 "mock",
                 workspace.OutputRoot));
 
-        Assert.True(result.EvalPassed);
+        Assert.Equal(RunOutcome.Success, result.Outcome);
         Assert.Null(result.HtmlViewPath);
         Assert.False(File.Exists(Path.Combine(result.OutputDirectory, "index.html")));
         Assert.All(

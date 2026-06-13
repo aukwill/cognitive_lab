@@ -130,6 +130,53 @@ public sealed class ModeLoaderTests
         Assert.Contains("revision", exception.Message);
     }
 
+    [Fact]
+    public async Task LoadAsync_WithLens_LoadsLensSpecificPrompts()
+    {
+        using var workspace = new TestWorkspace();
+        var modeDirectory = workspace.CreateMode();
+        var lensDirectory = Path.Combine(modeDirectory, "prompts", "warcraft");
+        Directory.CreateDirectory(lensDirectory);
+        File.WriteAllText(Path.Combine(lensDirectory, "main.md"), "Lens main prompt.");
+        File.WriteAllText(Path.Combine(lensDirectory, "critic.md"), "Lens critic prompt.");
+        File.WriteAllText(Path.Combine(lensDirectory, "revision.md"), "Lens revision prompt.");
+        var loader = new FileModeLoader(workspace.ModesRoot);
+
+        var mode = await loader.LoadAsync("frame", "warcraft");
+
+        Assert.Collection(
+            mode.Phases,
+            phase => Assert.Equal("Lens main prompt.", phase.Prompt),
+            phase => Assert.Equal("Lens critic prompt.", phase.Prompt),
+            phase => Assert.Equal("Lens revision prompt.", phase.Prompt));
+    }
+
+    [Fact]
+    public async Task LoadAsync_WithUnknownLens_ThrowsModeLoadException()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.CreateMode();
+        var loader = new FileModeLoader(workspace.ModesRoot);
+
+        var exception = await Assert.ThrowsAsync<ModeLoadException>(
+            () => loader.LoadAsync("frame", "nonexistent"));
+
+        Assert.Contains("Lens 'nonexistent'", exception.Message);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RejectsUnsafeLensNames()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.CreateMode();
+        var loader = new FileModeLoader(workspace.ModesRoot);
+
+        var exception = await Assert.ThrowsAsync<ModeLoadException>(
+            () => loader.LoadAsync("frame", "../escape"));
+
+        Assert.Contains("unsupported characters", exception.Message);
+    }
+
     private static ModePhaseManifest CreatePhase(
         string name,
         PhaseKind kind) =>
