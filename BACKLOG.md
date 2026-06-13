@@ -4,8 +4,22 @@ This backlog develops the runtime thesis:
 
 > The LLM is not the product. The loop is the product.
 
+Cognitive Runtime Lab is a local-first C#/.NET environment for running,
+comparing, and inspecting bounded agent orchestration patterns, where the
+runtime owns the loop and the model only performs reasoning inside assigned
+steps.
+
+The core object is the `OrchestrationPattern`: single-pass, critic-revision,
+linear-pipeline, router, supervisor-workers, and similar shapes. Each pattern
+is runtime-owned, bounded, inspectable, and mockable. `Mode` describes what a
+phase reasons about; `OrchestrationPattern` describes how phases relate and
+who runs next. The bounded revision loop already built is the
+`CriticRevisionPattern`, not the whole project.
+
 Items are ordered to strengthen runtime-owned orchestration, state, policy,
-traces, evals, and artifacts before expanding integrations.
+traces, evals, and artifacts before expanding integrations. Trace, artifact,
+and eval hardening exist to make orchestration patterns inspectable -- they
+are not ends in themselves.
 
 ## Backlog Rules
 
@@ -37,21 +51,36 @@ This is the proposed order for the next implementation cycle. All other items
 remain open, but should not interrupt this queue without an explicit priority
 change.
 
-The cycle targets the two questions a reviewer of a cognitive runtime asks
-first: does the loop demonstrably do anything, and is the runtime built on
-typed state rather than local variables? Heavy integrity machinery (hash
-chains, run manifests, resume, artifact bundles, drift reports) is deliberately
-deferred until the simpler version earns it. Each item is intended to be one
-reviewable pull request.
+The cycle re-centers the project on orchestration: the runtime should expose
+multiple loop shapes, not just the bounded revision loop, and a reviewer
+should be able to run and compare patterns side by side. Each item is intended
+to be one reviewable pull request.
+
+- [ ] `OP-001` Define `IOrchestrationPattern`.
+- [ ] `OP-002` Implement `SinglePassPattern`.
+- [ ] `OP-003` Implement `CriticRevisionPattern` on top of `IOrchestrationPattern`.
+- [ ] `OP-004` Implement `LinearPipelinePattern`.
+- [ ] `OP-005` Add pattern selection to the CLI.
+- [ ] `OP-006` Trace pattern lifecycle.
+- [ ] `OP-007` Write a `pattern.md` artifact.
+- [ ] `OP-008` Show the pattern graph in static HTML.
+- [ ] `OP-009` Add mock outputs for each pattern.
+- [ ] `OP-010` Add tests proving the runtime, not the model, controls the
+      pattern.
+
+### Completed - Loop Efficacy Cycle
 
 - [x] `EV-001` Parse Markdown headings structurally. Prerequisite for the rest.
 - [x] `EV-002` Validate content under each heading.
-- [x] `EFF-001` Add a deterministic loop-efficacy eval. Cycle centerpiece;
-      the only item that touches mode files.
+- [x] `EFF-001` Add a deterministic loop-efficacy eval.
+
+### Deferred From The Previous Cycle
+
+These remain valuable but should not block the orchestration-pattern queue:
+
 - [ ] `RS-001` Introduce immutable run state.
-- [ ] `RS-007` Define a typed run outcome.
-- [ ] `TA-002` Centralize trace event names. Pulled earlier than its milestone
-      so EV-003 and EV-005 do not repeat event-name string literals.
+- [x] `RS-007` Define a typed run outcome.
+- [ ] `TA-002` Centralize trace event names.
 - [ ] `EV-003` Evaluate phase order and cardinality.
 - [ ] `EV-005` Evaluate terminal trace integrity.
 
@@ -274,6 +303,148 @@ Acceptance:
 - The distinction between model reasoning and runtime completion remains
   explicit.
 
+## Milestone 1.1: Orchestration Patterns
+
+Outcome: the runtime exposes multiple bounded orchestration patterns through a
+single abstraction, and the CLI can select and compare them. This is the
+current center of gravity for the project.
+
+```text
+dotnet run --project src/CognitiveRuntime.Cli -- \
+  run \
+  --pattern critic-revision \
+  --mode frame \
+  --input examples/agent_runtime_goal.txt \
+  --run-mode mock \
+  --html
+```
+
+```text
+outputs/<timestamp>_critic-revision_frame/
+  input.md
+  result.md
+  pattern.md
+  trace.json
+  run_summary.md
+  eval_report.md
+  index.html
+  phases/
+    01-main.md
+    02-critic.md
+    03-revision.md
+```
+
+### OP-001 - Define `IOrchestrationPattern`
+
+Priority: `P0`
+
+Acceptance:
+
+- A pattern declares its name, the ordered phases or stages it runs, and how
+  each step's context is assembled from prior results.
+- The runtime, not the pattern implementation, drives execution: the
+  abstraction returns a plan or the next step rather than calling the model
+  itself.
+- Existing orchestration concepts (phase, phase context, revision) are
+  expressible as an `IOrchestrationPattern` without breaking current tests.
+
+### OP-002 - Implement `SinglePassPattern`
+
+Priority: `P0`
+
+Acceptance:
+
+- A single main phase runs and its output is the authoritative result.
+- The pattern is the trivial case used to validate the abstraction before
+  porting the more complex critic-revision loop.
+
+### OP-003 - Implement `CriticRevisionPattern` on top of `IOrchestrationPattern`
+
+Priority: `P0`
+
+Acceptance:
+
+- The existing bounded `main -> critic -> revision -> eval` loop is expressed
+  as an `IOrchestrationPattern` implementation.
+- All existing revision-loop tests and behavior (RL-001 through RL-010)
+  continue to pass unchanged.
+- The pattern name `critic-revision` is used in traces and artifacts.
+
+### OP-004 - Implement `LinearPipelinePattern`
+
+Priority: `P0`
+
+Acceptance:
+
+- The pattern runs a runtime-configured, ordered sequence of modes (for
+  example `frame,challenge,synthesize`), each a complete phase or
+  pattern run in its own right.
+- The model cannot add, remove, reorder, or repeat stages.
+- Each stage's artifacts are written under `stages/NN-<mode>/`.
+
+### OP-005 - Add pattern selection to the CLI
+
+Priority: `P0`
+
+Acceptance:
+
+- `--pattern <name>` selects the orchestration pattern; `critic-revision`
+  remains the default to preserve current behavior.
+- `--pipeline <mode,mode,...>` configures `LinearPipelinePattern` stages.
+- Unknown pattern names fail as a usage error before any model call.
+
+### OP-006 - Trace pattern lifecycle
+
+Priority: `P0`
+
+Acceptance:
+
+- The trace records which pattern ran and its declared step/stage plan.
+- Pattern-level start and completion events bound the existing phase-level
+  events.
+- Tests assert the pattern lifecycle events for at least two patterns.
+
+### OP-007 - Write a `pattern.md` artifact
+
+Priority: `P0`
+
+Acceptance:
+
+- `pattern.md` describes the selected pattern, its steps or stages, and how
+  context flowed between them for this run.
+- Content is generated from typed pattern data, not free-form model output.
+
+### OP-008 - Show the pattern graph in static HTML
+
+Priority: `P1`
+
+Acceptance:
+
+- The static run view renders the pattern's steps/stages and their
+  relationships (e.g. critic-revision vs. linear pipeline) distinctly.
+- Static HTML remains read-only, script-free, and server-free.
+
+### OP-009 - Add mock outputs for each pattern
+
+Priority: `P0`
+
+Acceptance:
+
+- `MockModelClient` produces contract-satisfying output for every step of
+  `SinglePassPattern`, `CriticRevisionPattern`, and `LinearPipelinePattern`.
+- A mock run of each pattern passes its evals without credentials.
+
+### OP-010 - Add tests proving the runtime, not the model, controls the pattern
+
+Priority: `P0`
+
+Acceptance:
+
+- Tests show that model output cannot alter step order, add steps, skip
+  steps, or change which pattern ran.
+- Tests cover at least `SinglePassPattern`, `CriticRevisionPattern`, and
+  `LinearPipelinePattern`.
+
 ## Milestone 2: Explicit Runtime State And Lifecycle
 
 Outcome: orchestration operates on typed state and validated transitions rather
@@ -368,6 +539,8 @@ Token and cost budgets are a later extension of this item and depend on
 `MP-003`. Unknown provider usage must never be treated as zero.
 
 ### RS-007 - Define a typed run outcome
+
+Status: Complete.
 
 Priority: `P1`
 
@@ -1497,6 +1670,10 @@ Guardrails:
 - No provider calls are required.
 
 ### RX-004 - Mode Pipeline Lab
+
+Superseded by `OP-004` (`LinearPipelinePattern`), which implements this
+experiment as a first-class orchestration pattern rather than a standalone
+lab. Retained here for the artifact-layout idea.
 
 Run a configured multi-mode pipeline:
 

@@ -1,7 +1,9 @@
 # Cognitive Agent Runtime Lab
 
-A local-first C#/.NET runtime for running reusable cognitive modes from files.
-It is intentionally not a chatbot, web app, or autonomous agent framework.
+A local-first C#/.NET environment for running, comparing, and inspecting
+bounded agent orchestration patterns. The runtime owns the loop; the model
+only performs reasoning inside the steps it is assigned. It is intentionally
+not a chatbot, web app, or autonomous agent framework.
 
 > The LLM is not the product. The loop is the product.
 
