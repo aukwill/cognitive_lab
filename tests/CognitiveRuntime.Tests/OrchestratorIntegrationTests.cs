@@ -41,9 +41,17 @@ public sealed class OrchestratorIntegrationTests
                 result.ResultPath,
                 result.TracePath,
                 Path.Combine(result.OutputDirectory, "run_summary.md"),
-                result.EvalReportPath
+                result.EvalReportPath,
+                Path.Combine(result.OutputDirectory, "pattern.md")
             },
             path => Assert.True(File.Exists(path), $"Missing artifact: {path}"));
+
+        var patternMarkdown = await File.ReadAllTextAsync(
+            Path.Combine(result.OutputDirectory, "pattern.md"));
+        Assert.Contains("`critic-revision`", patternMarkdown);
+        Assert.Contains("`main` (main) - context: no prior phase results", patternMarkdown);
+        Assert.Contains("`critic` (critic) - context: main", patternMarkdown);
+        Assert.Contains("`revision` (revision) - context: main, critic", patternMarkdown);
 
         var resultMarkdown = await File.ReadAllTextAsync(result.ResultPath);
         Assert.Contains("## Authoritative Revision", resultMarkdown);
@@ -92,6 +100,11 @@ public sealed class OrchestratorIntegrationTests
         Assert.Contains("revision.started", eventTypes);
         Assert.Contains("revision.completed", eventTypes);
         Assert.Contains("artifact.written", eventTypes);
+        Assert.Contains(
+            traceEvents,
+            traceEvent =>
+                traceEvent.GetProperty("type").GetString() == "artifact.written" &&
+                traceEvent.GetProperty("data").GetProperty("name").GetString() == "pattern.md");
         Assert.Contains("eval.started", eventTypes);
         Assert.Contains("eval.completed", eventTypes);
         Assert.Contains("run.completed", eventTypes);
@@ -192,7 +205,11 @@ public sealed class OrchestratorIntegrationTests
             new[] { "Run", "Artifacts", "Mode", "Phases", "Tool Policy", "Evals", "Trace" },
             heading => Assert.Contains($">{heading}<", html));
         Assert.All(
-            new[] { "input.md", "result.md", "trace.json", "run_summary.md", "eval_report.md" },
+            new[]
+            {
+                "input.md", "result.md", "trace.json", "run_summary.md", "eval_report.md",
+                "pattern.md"
+            },
             artifact => Assert.Contains($"href=\"{artifact}\"", html));
         Assert.Contains(inputSource, html);
         Assert.Contains("No tool policy decisions were recorded", html);

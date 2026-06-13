@@ -44,7 +44,8 @@ public enum ArtifactKind
     Input,
     Result,
     RunSummary,
-    EvalReport
+    EvalReport,
+    Pattern
 }
 
 public sealed record RunArtifactPaths(
@@ -53,7 +54,8 @@ public sealed record RunArtifactPaths(
     string ResultPath,
     string TracePath,
     string RunSummaryPath,
-    string EvalReportPath)
+    string EvalReportPath,
+    string PatternPath)
 {
     public string GetPath(ArtifactKind kind) => kind switch
     {
@@ -61,11 +63,12 @@ public sealed record RunArtifactPaths(
         ArtifactKind.Result => ResultPath,
         ArtifactKind.RunSummary => RunSummaryPath,
         ArtifactKind.EvalReport => EvalReportPath,
+        ArtifactKind.Pattern => PatternPath,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 
     public IReadOnlyList<string> RequiredPaths =>
-        [InputPath, ResultPath, TracePath, RunSummaryPath, EvalReportPath];
+        [InputPath, ResultPath, TracePath, RunSummaryPath, EvalReportPath, PatternPath];
 }
 
 public sealed record PhaseResult(

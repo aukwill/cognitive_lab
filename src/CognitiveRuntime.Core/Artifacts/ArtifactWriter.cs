@@ -40,7 +40,8 @@ public sealed class ArtifactWriter : IArtifactWriter
             Path.Combine(runDirectory, "result.md"),
             Path.Combine(runDirectory, "trace.json"),
             Path.Combine(runDirectory, "run_summary.md"),
-            Path.Combine(runDirectory, "eval_report.md"));
+            Path.Combine(runDirectory, "eval_report.md"),
+            Path.Combine(runDirectory, "pattern.md"));
 
         return Task.FromResult(artifacts);
     }
@@ -71,7 +72,8 @@ public sealed class ArtifactWriter : IArtifactWriter
             Path.Combine(stageDirectory, "result.md"),
             Path.Combine(stageDirectory, "trace.json"),
             Path.Combine(stageDirectory, "run_summary.md"),
-            Path.Combine(stageDirectory, "eval_report.md"));
+            Path.Combine(stageDirectory, "eval_report.md"),
+            Path.Combine(stageDirectory, "pattern.md"));
 
         return Task.FromResult(artifacts);
     }

@@ -64,7 +64,8 @@ public static class RunViewModelFactory
             artifacts.ResultPath,
             artifacts.TracePath,
             artifacts.RunSummaryPath,
-            artifacts.EvalReportPath
+            artifacts.EvalReportPath,
+            artifacts.PatternPath
         };
 
         return paths

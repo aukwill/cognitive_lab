@@ -62,7 +62,7 @@ to be one reviewable pull request.
 - [x] `OP-004` Implement `LinearPipelinePattern`.
 - [x] `OP-005` Add pattern selection to the CLI.
 - [x] `OP-006` Trace pattern lifecycle.
-- [ ] `OP-007` Write a `pattern.md` artifact.
+- [x] `OP-007` Write a `pattern.md` artifact.
 - [ ] `OP-008` Show the pattern graph in static HTML.
 - [ ] `OP-009` Add mock outputs for each pattern.
 - [ ] `OP-010` Add tests proving the runtime, not the model, controls the

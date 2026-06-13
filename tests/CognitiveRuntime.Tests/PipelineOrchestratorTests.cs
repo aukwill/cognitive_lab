@@ -54,6 +54,13 @@ public sealed class PipelineOrchestratorTests
         Assert.Contains("Pattern: `linear-pipeline`", runSummaryMarkdown);
         Assert.Contains("frame -> challenge", runSummaryMarkdown);
 
+        var patternMarkdown = await File.ReadAllTextAsync(
+            Path.Combine(result.OutputDirectory, "pattern.md"));
+        Assert.Contains("`linear-pipeline`", patternMarkdown);
+        Assert.Contains("frame -> challenge", patternMarkdown);
+        Assert.Contains("input: the run's initial input", patternMarkdown);
+        Assert.Contains("input: stage 01 (`frame`)'s authoritative revision", patternMarkdown);
+
         await using var traceStream = File.OpenRead(result.TracePath);
         using var traceDocument = await JsonDocument.ParseAsync(traceStream);
         var traceEvents = traceDocument.RootElement
@@ -143,6 +150,11 @@ public sealed class PipelineOrchestratorTests
         var runSummaryMarkdown = await File.ReadAllTextAsync(
             Path.Combine(result.OutputDirectory, "run_summary.md"));
         Assert.Contains("Pattern: `single-pass`", runSummaryMarkdown);
+
+        var patternMarkdown = await File.ReadAllTextAsync(
+            Path.Combine(result.OutputDirectory, "pattern.md"));
+        Assert.Contains("`single-pass`", patternMarkdown);
+        Assert.Contains("`main` (main) - context: no prior phase results", patternMarkdown);
 
         var eventTypes = await ReadTraceEventTypesAsync(result.OutputDirectory);
         Assert.DoesNotContain("critic.started", eventTypes);

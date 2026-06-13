@@ -117,12 +117,18 @@ public sealed class Orchestrator
                 cancellationToken);
 
             var phaseResults = new List<PhaseResult>(steps.Count);
+            var stepExecutions = new List<PatternStepExecution>(steps.Count);
 
             foreach (var step in steps)
             {
                 var context = pattern.SelectContext(
                     step,
                     Array.AsReadOnly(phaseResults.ToArray()));
+
+                stepExecutions.Add(new PatternStepExecution(
+                    step.Name,
+                    step.Kind,
+                    context.Select(phase => phase.PhaseName).ToArray()));
 
                 var phaseResult = await _phaseRunner.RunAsync(
                     runId,
@@ -144,6 +150,13 @@ public sealed class Orchestrator
                     ["pattern"] = pattern.Name,
                     ["stepCount"] = phaseResults.Count
                 },
+                cancellationToken);
+
+            await WriteArtifactAsync(
+                artifacts,
+                ArtifactKind.Pattern,
+                PatternMarkdownRenderer.RenderForSteps(pattern.Name, stepExecutions),
+                trace,
                 cancellationToken);
 
             var result = ResultComposer.Compose(mode, phaseResults);
@@ -332,6 +345,13 @@ public sealed class Orchestrator
                     ["pattern"] = pipeline.Name,
                     ["stageCount"] = stages.Count
                 },
+                cancellationToken);
+
+            await WriteArtifactAsync(
+                artifacts,
+                ArtifactKind.Pattern,
+                PatternMarkdownRenderer.RenderForPipeline(pipeline.Name, pipeline.StageModeNames),
+                trace,
                 cancellationToken);
 
             var lastStage = stages[^1];
