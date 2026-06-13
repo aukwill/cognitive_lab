@@ -1,0 +1,3 @@
+Build a local-first cognitive agent runtime where the runtime owns the loop,
+model providers remain replaceable, every decision is traceable, and each run
+produces deterministic artifacts and an evaluation report.

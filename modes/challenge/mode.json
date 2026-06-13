@@ -1,0 +1,27 @@
+{
+  "name": "challenge",
+  "description": "Stress-test a claim through assumptions, failure modes, and counterarguments.",
+  "version": 1,
+  "phases": [
+    {
+      "name": "main",
+      "kind": "main",
+      "prompt": "prompts/main.md"
+    },
+    {
+      "name": "critic",
+      "kind": "critic",
+      "prompt": "prompts/critic.md"
+    }
+  ],
+  "outputContract": {
+    "requiredHeadings": [
+      "## Target Claim",
+      "## Assumptions",
+      "## Failure Modes",
+      "## Counterarguments",
+      "## Tests"
+    ],
+    "minimumLength": 200
+  }
+}

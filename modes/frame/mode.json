@@ -1,0 +1,27 @@
+{
+  "name": "frame",
+  "description": "Turn ambiguous intent into an explicit, testable problem frame.",
+  "version": 1,
+  "phases": [
+    {
+      "name": "main",
+      "kind": "main",
+      "prompt": "prompts/main.md"
+    },
+    {
+      "name": "critic",
+      "kind": "critic",
+      "prompt": "prompts/critic.md"
+    }
+  ],
+  "outputContract": {
+    "requiredHeadings": [
+      "## Problem",
+      "## Objective",
+      "## Constraints",
+      "## Unknowns",
+      "## Next Actions"
+    ],
+    "minimumLength": 200
+  }
+}

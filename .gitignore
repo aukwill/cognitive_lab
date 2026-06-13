@@ -1,0 +1,9 @@
+.packages/
+.appdata/
+**/bin/
+**/obj/
+outputs/*
+!outputs/.gitkeep
+TestResults/
+*.user
+*.suo

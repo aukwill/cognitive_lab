@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CognitiveRuntime.Cli/CognitiveRuntime.Cli.csproj" />
+    <Project Path="src/CognitiveRuntime.Core/CognitiveRuntime.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CognitiveRuntime.Tests/CognitiveRuntime.Tests.csproj" />
+  </Folder>
+</Solution>

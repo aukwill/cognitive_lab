@@ -1,0 +1,27 @@
+{
+  "name": "synthesize",
+  "description": "Combine competing observations into a traceable recommendation.",
+  "version": 1,
+  "phases": [
+    {
+      "name": "main",
+      "kind": "main",
+      "prompt": "prompts/main.md"
+    },
+    {
+      "name": "critic",
+      "kind": "critic",
+      "prompt": "prompts/critic.md"
+    }
+  ],
+  "outputContract": {
+    "requiredHeadings": [
+      "## Shared Ground",
+      "## Tensions",
+      "## Synthesis",
+      "## Tradeoffs",
+      "## Recommendation"
+    ],
+    "minimumLength": 200
+  }
+}
