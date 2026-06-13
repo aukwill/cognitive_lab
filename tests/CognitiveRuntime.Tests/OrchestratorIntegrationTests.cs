@@ -59,6 +59,10 @@ public sealed class OrchestratorIntegrationTests
         Assert.Contains("revision phase ran", evalMarkdown);
         Assert.Contains("revision is not empty", evalMarkdown);
 
+        var runSummaryMarkdown = await File.ReadAllTextAsync(
+            Path.Combine(result.OutputDirectory, "run_summary.md"));
+        Assert.Contains("Pattern: `critic-revision`", runSummaryMarkdown);
+
         await using var traceStream = File.OpenRead(result.TracePath);
         using var traceDocument = await JsonDocument.ParseAsync(traceStream);
         var traceEvents = traceDocument.RootElement
@@ -69,6 +73,12 @@ public sealed class OrchestratorIntegrationTests
             .Select(element =>
                 element.GetProperty("type").GetString() ?? string.Empty)
             .ToArray();
+
+        var runStartedEvent = traceEvents.Single(
+            traceEvent => traceEvent.GetProperty("type").GetString() == "run.started");
+        Assert.Equal(
+            "critic-revision",
+            runStartedEvent.GetProperty("data").GetProperty("pattern").GetString());
 
         Assert.Contains("run.started", eventTypes);
         Assert.Contains("mode.loaded", eventTypes);

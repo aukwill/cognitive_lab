@@ -3,6 +3,7 @@ using CognitiveRuntime.Core.Abstractions;
 using CognitiveRuntime.Core.Contracts;
 using CognitiveRuntime.Core.Evaluation;
 using CognitiveRuntime.Core.Exceptions;
+using CognitiveRuntime.Core.Runtime.Orchestration;
 using CognitiveRuntime.Core.Views;
 
 namespace CognitiveRuntime.Core.Runtime;
@@ -16,6 +17,7 @@ public sealed class Orchestrator
     private readonly ITraceSessionFactory _traceSessionFactory;
     private readonly IEvalRunner _evalRunner;
     private readonly IRunViewWriter _runViewWriter;
+    private readonly IOrchestrationPattern _pattern;
 
     public Orchestrator(
         IModeLoader modeLoader,
@@ -24,7 +26,8 @@ public sealed class Orchestrator
         IArtifactWriter artifactWriter,
         ITraceSessionFactory traceSessionFactory,
         IEvalRunner evalRunner,
-        IRunViewWriter runViewWriter)
+        IRunViewWriter runViewWriter,
+        IOrchestrationPattern pattern)
     {
         _modeLoader = modeLoader;
         _modelClientFactory = modelClientFactory;
@@ -33,6 +36,7 @@ public sealed class Orchestrator
         _traceSessionFactory = traceSessionFactory;
         _evalRunner = evalRunner;
         _runViewWriter = runViewWriter;
+        _pattern = pattern;
     }
 
     public async Task<RunResult> RunAsync(
@@ -60,7 +64,8 @@ public sealed class Orchestrator
                 {
                     ["mode"] = request.ModeName,
                     ["provider"] = request.ModelProvider,
-                    ["outputDirectory"] = artifacts.RunDirectory
+                    ["outputDirectory"] = artifacts.RunDirectory,
+                    ["pattern"] = _pattern.Name
                 },
                 cancellationToken);
 
@@ -87,16 +92,21 @@ public sealed class Orchestrator
                 cancellationToken);
 
             var modelClient = _modelClientFactory.Resolve(request.ModelProvider);
-            var phaseResults = new List<PhaseResult>(mode.Phases.Count);
+            var steps = _pattern.Plan(mode);
+            var phaseResults = new List<PhaseResult>(steps.Count);
 
-            foreach (var phase in mode.Phases)
+            foreach (var step in steps)
             {
+                var context = _pattern.SelectContext(
+                    step,
+                    Array.AsReadOnly(phaseResults.ToArray()));
+
                 var phaseResult = await _phaseRunner.RunAsync(
                     runId,
                     mode,
-                    phase,
+                    step.Phase,
                     request.Input,
-                    Array.AsReadOnly(phaseResults.ToArray()),
+                    context,
                     modelClient,
                     trace,
                     cancellationToken);
@@ -117,7 +127,8 @@ public sealed class Orchestrator
                 request,
                 mode,
                 phaseResults,
-                artifacts);
+                artifacts,
+                _pattern.Name);
             await WriteArtifactAsync(
                 artifacts,
                 ArtifactKind.RunSummary,
@@ -328,13 +339,15 @@ public sealed class Orchestrator
         RunRequest request,
         LoadedMode mode,
         IReadOnlyList<PhaseResult> phaseResults,
-        RunArtifactPaths artifacts)
+        RunArtifactPaths artifacts,
+        string patternName)
     {
         var builder = new StringBuilder()
             .AppendLine("# Run Summary")
             .AppendLine()
             .AppendLine($"- Run ID: `{runId}`")
             .AppendLine($"- Mode: `{mode.Manifest.Name}`")
+            .AppendLine($"- Pattern: `{patternName}`")
             .AppendLine($"- Model provider: `{request.ModelProvider}`")
             .AppendLine($"- Output directory: `{artifacts.RunDirectory}`")
             .AppendLine($"- Phases run: {phaseResults.Count}")

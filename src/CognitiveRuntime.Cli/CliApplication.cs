@@ -6,6 +6,7 @@ using CognitiveRuntime.Core.Exceptions;
 using CognitiveRuntime.Core.Models;
 using CognitiveRuntime.Core.Modes;
 using CognitiveRuntime.Core.Runtime;
+using CognitiveRuntime.Core.Runtime.Orchestration;
 using CognitiveRuntime.Core.Tools;
 using CognitiveRuntime.Core.Tracing;
 using Microsoft.Extensions.Configuration;
@@ -175,6 +176,7 @@ internal sealed class CliApplication
         services.AddSingleton<LoopEfficacyEvaluator>();
         services.AddSingleton<IEvalRunner, EvalRunner>();
         services.AddSingleton<PhaseRunner>();
+        services.AddSingleton<IOrchestrationPattern, CriticRevisionPattern>();
 
         services.AddSingleton<IModelClient, MockModelClient>();
         services.AddSingleton<IModelClient>(

@@ -5,6 +5,7 @@ using CognitiveRuntime.Core.Evaluation;
 using CognitiveRuntime.Core.Models;
 using CognitiveRuntime.Core.Modes;
 using CognitiveRuntime.Core.Runtime;
+using CognitiveRuntime.Core.Runtime.Orchestration;
 using CognitiveRuntime.Core.Tracing;
 
 namespace CognitiveRuntime.Tests;
@@ -17,7 +18,8 @@ internal static class RuntimeTestHarness
         IModelClient? modelClient = null,
         IEvalRunner? evalRunner = null,
         ITraceSessionFactory? traceSessionFactory = null,
-        IRunViewWriter? runViewWriter = null)
+        IRunViewWriter? runViewWriter = null,
+        IOrchestrationPattern? pattern = null)
     {
         IModelClient[] modelClients = [modelClient ?? new MockModelClient()];
 
@@ -28,7 +30,8 @@ internal static class RuntimeTestHarness
             new ArtifactWriter(timeProvider),
             traceSessionFactory ?? new JsonTraceSessionFactory(timeProvider),
             evalRunner ?? new EvalRunner(new OutputContractValidator()),
-            runViewWriter ?? new HtmlRunViewWriter());
+            runViewWriter ?? new HtmlRunViewWriter(),
+            pattern ?? new CriticRevisionPattern());
     }
 
     public static void AssertRequiredArtifactsExist(string outputDirectory)
