@@ -57,7 +57,7 @@ should be able to run and compare patterns side by side. Each item is intended
 to be one reviewable pull request.
 
 - [x] `OP-001` Define `IOrchestrationPattern`.
-- [ ] `OP-002` Implement `SinglePassPattern`.
+- [x] `OP-002` Implement `SinglePassPattern`.
 - [ ] `OP-003` Implement `CriticRevisionPattern` on top of `IOrchestrationPattern`.
 - [ ] `OP-004` Implement `LinearPipelinePattern`.
 - [ ] `OP-005` Add pattern selection to the CLI.
