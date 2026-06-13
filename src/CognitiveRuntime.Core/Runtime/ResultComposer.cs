@@ -9,22 +9,9 @@ public static class ResultComposer
         LoadedMode mode,
         IReadOnlyList<PhaseResult> phaseResults)
     {
-        var mainResults = phaseResults
-            .Where(result => result.PhaseKind == PhaseKind.Main)
-            .ToArray();
-        var criticResults = phaseResults
-            .Where(result => result.PhaseKind == PhaseKind.Critic)
-            .ToArray();
-
-        if (mainResults.Length == 0)
-        {
-            throw new InvalidOperationException("No main phase result was produced.");
-        }
-
-        if (criticResults.Length == 0)
-        {
-            throw new InvalidOperationException("No critic phase result was produced.");
-        }
+        var mainResult = GetSingleResult(phaseResults, PhaseKind.Main);
+        var criticResult = GetSingleResult(phaseResults, PhaseKind.Critic);
+        var revisionResult = GetSingleResult(phaseResults, PhaseKind.Revision);
 
         var title = char.ToUpperInvariant(mode.Manifest.Name[0]) +
             mode.Manifest.Name[1..];
@@ -34,25 +21,37 @@ public static class ResultComposer
             .AppendLine(" Result")
             .AppendLine();
 
-        AppendResults(builder, mainResults);
-        builder.AppendLine().AppendLine("## Critic Review").AppendLine();
-        AppendResults(builder, criticResults);
+        builder
+            .AppendLine("## Authoritative Revision")
+            .AppendLine()
+            .AppendLine(revisionResult.Content.Trim())
+            .AppendLine()
+            .AppendLine("## Initial Draft")
+            .AppendLine()
+            .AppendLine(mainResult.Content.Trim())
+            .AppendLine()
+            .AppendLine("## Critic Review")
+            .AppendLine()
+            .AppendLine(criticResult.Content.Trim());
 
         return builder.ToString();
     }
 
-    private static void AppendResults(
-        StringBuilder builder,
-        IReadOnlyList<PhaseResult> results)
+    private static PhaseResult GetSingleResult(
+        IReadOnlyList<PhaseResult> phaseResults,
+        PhaseKind phaseKind)
     {
-        for (var index = 0; index < results.Count; index++)
-        {
-            if (index > 0)
-            {
-                builder.AppendLine().AppendLine("---").AppendLine();
-            }
+        var matches = phaseResults
+            .Where(result => result.PhaseKind == phaseKind)
+            .ToArray();
 
-            builder.AppendLine(results[index].Content.Trim());
+        if (matches.Length != 1)
+        {
+            throw new InvalidOperationException(
+                $"Expected exactly one {phaseKind.ToString().ToLowerInvariant()} " +
+                $"phase result, but found {matches.Length}.");
         }
+
+        return matches[0];
     }
 }

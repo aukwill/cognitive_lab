@@ -10,4 +10,5 @@ public sealed record EvalReport(IReadOnlyList<EvalCheckResult> Checks)
 public sealed record EvalContext(
     RunArtifactPaths Artifacts,
     LoadedMode Mode,
-    IReadOnlyList<TraceEvent> TraceEvents);
+    IReadOnlyList<TraceEvent> TraceEvents,
+    IReadOnlyList<PhaseResult> PhaseResults);

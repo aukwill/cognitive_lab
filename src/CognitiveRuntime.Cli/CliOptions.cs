@@ -8,7 +8,9 @@ internal sealed record CliOptions(
     string ModelProvider,
     string ModesRoot,
     string OutputRoot,
-    bool ShowHelp)
+    bool WriteHtmlView,
+    bool ShowHelp,
+    string? Lens = null)
 {
     public static CliOptions Parse(
         IReadOnlyList<string> args,
@@ -22,6 +24,7 @@ internal sealed record CliOptions(
                 "mock",
                 string.Empty,
                 string.Empty,
+                WriteHtmlView: false,
                 ShowHelp: true);
         }
 
@@ -35,6 +38,12 @@ internal sealed record CliOptions(
             {
                 throw new CliUsageException(
                     $"Unexpected positional argument '{argument}'.");
+            }
+
+            if (string.Equals(argument, "--html", StringComparison.OrdinalIgnoreCase))
+            {
+                values[argument] = bool.TrueString;
+                continue;
             }
 
             if (index + 1 >= args.Count ||
@@ -61,6 +70,7 @@ internal sealed record CliOptions(
         var outputRoot = Path.GetFullPath(
             values.GetValueOrDefault("--output-root")
             ?? Path.Combine(currentDirectory, "outputs"));
+        var lens = values.GetValueOrDefault("--lens");
 
         return new CliOptions(
             mode,
@@ -68,7 +78,9 @@ internal sealed record CliOptions(
             provider,
             modesRoot,
             outputRoot,
-            ShowHelp: false);
+            values.ContainsKey("--html"),
+            ShowHelp: false,
+            Lens: string.IsNullOrWhiteSpace(lens) ? null : lens);
     }
 
     private static bool IsHelpFlag(string value) =>
@@ -84,7 +96,9 @@ internal sealed record CliOptions(
                 "--run-mode",
                 "--model-provider",
                 "--modes-root",
-                "--output-root"
+                "--output-root",
+                "--html",
+                "--lens"
             ],
             StringComparer.OrdinalIgnoreCase);
 

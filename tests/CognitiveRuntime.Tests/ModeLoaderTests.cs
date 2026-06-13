@@ -30,6 +30,12 @@ public sealed class ModeLoaderTests
                 Assert.Equal("critic", phase.Name);
                 Assert.Equal(PhaseKind.Critic, phase.Kind);
                 Assert.NotEmpty(phase.Prompt);
+            },
+            phase =>
+            {
+                Assert.Equal("revision", phase.Name);
+                Assert.Equal(PhaseKind.Revision, phase.Kind);
+                Assert.NotEmpty(phase.Prompt);
             });
     }
 
@@ -50,17 +56,87 @@ public sealed class ModeLoaderTests
     }
 
     [Fact]
-    public async Task LoadAsync_RequiresCriticPromptFile()
+    public async Task LoadAsync_RequiresRevisionPromptFile()
     {
         using var workspace = new TestWorkspace();
         var modeDirectory = workspace.CreateMode();
-        File.Delete(Path.Combine(modeDirectory, "prompts", "critic.md"));
+        File.Delete(Path.Combine(modeDirectory, "prompts", "revision.md"));
         var loader = new FileModeLoader(workspace.ModesRoot);
 
         var exception = await Assert.ThrowsAsync<ModeLoadException>(
             () => loader.LoadAsync("frame"));
 
         Assert.Contains("prompts", exception.Message);
-        Assert.Contains("critic.md", exception.Message);
+        Assert.Contains("revision.md", exception.Message);
     }
+
+    [Fact]
+    public async Task LoadAsync_RejectsMissingRevisionPhase()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.CreateMode(
+            phases:
+            [
+                CreatePhase("main", PhaseKind.Main),
+                CreatePhase("critic", PhaseKind.Critic)
+            ]);
+        var loader = new FileModeLoader(workspace.ModesRoot);
+
+        var exception = await Assert.ThrowsAsync<ModeLoadException>(
+            () => loader.LoadAsync("frame"));
+
+        Assert.Contains("exactly three phases", exception.Message);
+        Assert.Contains("main, critic, revision", exception.Message);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RejectsOutOfOrderRevisionPhase()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.CreateMode(
+            phases:
+            [
+                CreatePhase("main", PhaseKind.Main),
+                CreatePhase("revision", PhaseKind.Revision),
+                CreatePhase("critic", PhaseKind.Critic)
+            ]);
+        var loader = new FileModeLoader(workspace.ModesRoot);
+
+        var exception = await Assert.ThrowsAsync<ModeLoadException>(
+            () => loader.LoadAsync("frame"));
+
+        Assert.Contains("Phase 2", exception.Message);
+        Assert.Contains("critic", exception.Message);
+        Assert.Contains("revision", exception.Message);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RejectsDuplicateRequiredPhase()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.CreateMode(
+            phases:
+            [
+                CreatePhase("main", PhaseKind.Main),
+                CreatePhase("critic", PhaseKind.Critic),
+                CreatePhase("critic-copy", PhaseKind.Critic)
+            ]);
+        var loader = new FileModeLoader(workspace.ModesRoot);
+
+        var exception = await Assert.ThrowsAsync<ModeLoadException>(
+            () => loader.LoadAsync("frame"));
+
+        Assert.Contains("Phase 3", exception.Message);
+        Assert.Contains("revision", exception.Message);
+    }
+
+    private static ModePhaseManifest CreatePhase(
+        string name,
+        PhaseKind kind) =>
+        new()
+        {
+            Name = name,
+            Kind = kind,
+            Prompt = $"prompts/{name.Replace("-copy", string.Empty)}.md"
+        };
 }

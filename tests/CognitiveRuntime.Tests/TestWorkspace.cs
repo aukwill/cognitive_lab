@@ -26,7 +26,8 @@ internal sealed class TestWorkspace : IDisposable
 
     public string CreateMode(
         string name = "frame",
-        IReadOnlyList<string>? requiredHeadings = null)
+        IReadOnlyList<string>? requiredHeadings = null,
+        IReadOnlyList<ModePhaseManifest>? phases = null)
     {
         requiredHeadings ??=
             ["## Problem", "## Objective", "## Constraints", "## Unknowns", "## Next Actions"];
@@ -44,27 +45,36 @@ internal sealed class TestWorkspace : IDisposable
         File.WriteAllText(
             Path.Combine(promptsDirectory, "critic.md"),
             "Critique the previous output.");
+        File.WriteAllText(
+            Path.Combine(promptsDirectory, "revision.md"),
+            "Revise the draft using the critic while preserving the output contract.");
 
         var manifest = new ModeManifest
         {
             Name = name,
             Description = "Test mode.",
             Version = 1,
-            Phases =
-            [
-                new ModePhaseManifest
-                {
-                    Name = "main",
-                    Kind = PhaseKind.Main,
-                    Prompt = "prompts/main.md"
-                },
-                new ModePhaseManifest
-                {
-                    Name = "critic",
-                    Kind = PhaseKind.Critic,
-                    Prompt = "prompts/critic.md"
-                }
-            ],
+            Phases = phases?.ToList() ??
+                [
+                    new ModePhaseManifest
+                    {
+                        Name = "main",
+                        Kind = PhaseKind.Main,
+                        Prompt = "prompts/main.md"
+                    },
+                    new ModePhaseManifest
+                    {
+                        Name = "critic",
+                        Kind = PhaseKind.Critic,
+                        Prompt = "prompts/critic.md"
+                    },
+                    new ModePhaseManifest
+                    {
+                        Name = "revision",
+                        Kind = PhaseKind.Revision,
+                        Prompt = "prompts/revision.md"
+                    }
+                ],
             OutputContract = new OutputContract
             {
                 RequiredHeadings = [.. requiredHeadings],

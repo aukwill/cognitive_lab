@@ -19,11 +19,20 @@ dotnet test CognitiveRuntime.slnx --no-restore
 
 ## Run Mock Mode
 
+Command Prompt:
+
+```bat
+dotnet run --project src/CognitiveRuntime.Cli -- --mode frame --input examples/agent_runtime_goal.txt --run-mode mock --html
+```
+
+PowerShell:
+
 ```powershell
 dotnet run --project src/CognitiveRuntime.Cli -- `
   --mode frame `
   --input examples/agent_runtime_goal.txt `
-  --run-mode mock
+  --run-mode mock `
+  --html
 ```
 
 Each run creates a timestamped directory under `outputs/` containing:
@@ -33,6 +42,18 @@ Each run creates a timestamped directory under `outputs/` containing:
 - `trace.json`
 - `run_summary.md`
 - `eval_report.md`
+- `index.html` when `--html` is present
+
+## Static HTML Inspection
+
+The runtime may emit static HTML inspection artifacts for completed runs. These
+files are artifacts, not a web application. They make the loop inspectable
+without moving orchestration into the browser.
+
+`index.html` is opt-in with `--html`. It opens directly from the filesystem and
+contains read-only summaries of the run, mode, phases, tool policy decisions,
+evals, trace, and artifact links. It has no JavaScript, external assets, server,
+editing controls, approval controls, or rerun controls.
 
 ## Runtime Shape
 
@@ -43,23 +64,69 @@ The core runtime owns mode loading, phase order, model calls, tool policy,
 artifact paths, trace events, evaluation, and completion. Mode-specific prose
 lives under `modes/`.
 
+Every mode runs one bounded sequence:
+
+```text
+main -> critic -> revision
+```
+
+The main phase receives no prior results. The critic receives the typed main
+result. The revision receives typed main and critic results, preserves the
+mode's output contract, and becomes the authoritative answer. `result.md`
+places that revision first, with the initial draft and critic review retained
+as inspectable supporting context. Deterministic evals validate the revision
+itself, so headings in an appendix cannot make a malformed revision pass.
+
+The model produces reasoning content inside each phase. It does not choose
+phase order, request another revision, skip evaluation, write artifacts, or
+declare the run complete.
+
 `run.completed` marks completion of the cognitive phase loop. Deterministic
-post-run evaluation follows, and `run.finalized` marks the fully persisted run.
-This allows the eval to verify that the cognitive loop completed while keeping
-eval events in the same trace.
+post-run evaluation and configured optional artifacts follow.
+`run.finalized` is the single terminal success event and means all configured
+post-run work was persisted. `run.failed` is the single terminal failure event
+and follows best-effort required failure artifacts. A trace does not contain
+both terminal outcomes.
 
 ## Model Providers
 
 The default provider is `mock`. It is deterministic and requires no credentials.
 
-GitHub Models uses:
+GitHub Models calls the versioned GitHub REST inference API. Create a
+fine-grained personal access token with the `models:read` permission. Keep the
+token out of files and set it only in the current shell:
+
+Command Prompt:
+
+```bat
+set "GITHUB_TOKEN=YOUR_NEW_TOKEN"
+dotnet run --project src/CognitiveRuntime.Cli -- --mode frame --input examples/agent_runtime_goal.txt --run-mode github-models
+```
+
+PowerShell:
+
+```powershell
+$secureToken = Read-Host "GitHub PAT (models:read)" -AsSecureString
+$env:GITHUB_TOKEN = [System.Net.NetworkCredential]::new("", $secureToken).Password
+
+dotnet run --project src/CognitiveRuntime.Cli -- `
+  --mode frame `
+  --input examples/agent_runtime_goal.txt `
+  --run-mode github-models
+```
+
+The default model is `openai/gpt-4.1`. These optional settings override the
+GitHub Models defaults:
 
 ```text
-MODEL_PROVIDER=github-models
-GITHUB_TOKEN=
+GITHUB_MODELS_TOKEN=
+GITHUB_MODELS_MODEL=openai/gpt-4.1
 GITHUB_MODELS_ENDPOINT=https://models.github.ai/inference
-GITHUB_MODELS_MODEL=
+GITHUB_MODELS_API_VERSION=2026-03-10
 ```
+
+`GITHUB_MODELS_TOKEN` takes precedence over `GITHUB_TOKEN` when both are set.
+GitHub's free API usage is rate limited.
 
 The Azure Foundry client is an intentional MVP stub with a real provider
 boundary. It reports a clear error rather than pretending to be a production

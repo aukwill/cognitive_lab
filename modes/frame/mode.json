@@ -12,6 +12,11 @@
       "name": "critic",
       "kind": "critic",
       "prompt": "prompts/critic.md"
+    },
+    {
+      "name": "revision",
+      "kind": "revision",
+      "prompt": "prompts/revision.md"
     }
   ],
   "outputContract": {

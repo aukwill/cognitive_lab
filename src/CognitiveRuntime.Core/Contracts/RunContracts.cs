@@ -4,7 +4,10 @@ public sealed record RunRequest(
     string ModeName,
     string Input,
     string ModelProvider,
-    string OutputRoot);
+    string OutputRoot,
+    bool WriteHtmlView = false,
+    string? InputSource = null,
+    string? Lens = null);
 
 public sealed record RunResult(
     string RunId,
@@ -12,7 +15,8 @@ public sealed record RunResult(
     string ResultPath,
     string TracePath,
     string EvalReportPath,
-    bool EvalPassed);
+    bool EvalPassed,
+    string? HtmlViewPath = null);
 
 public enum ArtifactKind
 {

@@ -11,7 +11,7 @@ public sealed class PhaseRunner
         LoadedMode mode,
         LoadedPhase phase,
         string input,
-        string? previousOutput,
+        IReadOnlyList<PhaseResult> priorPhaseResults,
         IModelClient modelClient,
         ITraceSession trace,
         CancellationToken cancellationToken = default)
@@ -33,6 +33,17 @@ public sealed class PhaseRunner
                 new Dictionary<string, object?> { ["phase"] = phase.Name },
                 cancellationToken);
         }
+        else if (phase.Kind == PhaseKind.Revision)
+        {
+            await trace.EmitAsync(
+                "revision.started",
+                new Dictionary<string, object?>
+                {
+                    ["phase"] = phase.Name,
+                    ["priorPhaseCount"] = priorPhaseResults.Count
+                },
+                cancellationToken);
+        }
 
         await trace.EmitAsync(
             "model.called",
@@ -51,7 +62,7 @@ public sealed class PhaseRunner
                 phase.Kind,
                 phase.Prompt,
                 input,
-                previousOutput),
+                Array.AsReadOnly(priorPhaseResults.ToArray())),
             cancellationToken);
 
         if (string.IsNullOrWhiteSpace(response.Content))
@@ -75,6 +86,17 @@ public sealed class PhaseRunner
         {
             await trace.EmitAsync(
                 "critic.completed",
+                new Dictionary<string, object?>
+                {
+                    ["phase"] = phase.Name,
+                    ["contentLength"] = response.Content.Length
+                },
+                cancellationToken);
+        }
+        else if (phase.Kind == PhaseKind.Revision)
+        {
+            await trace.EmitAsync(
+                "revision.completed",
                 new Dictionary<string, object?>
                 {
                     ["phase"] = phase.Name,

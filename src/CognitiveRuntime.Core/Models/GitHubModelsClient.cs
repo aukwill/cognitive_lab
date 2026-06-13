@@ -9,6 +9,8 @@ namespace CognitiveRuntime.Core.Models;
 
 public sealed class GitHubModelsClient : IModelClient
 {
+    private const string GitHubJsonMediaType = "application/vnd.github+json";
+    private const string ApiVersionHeader = "X-GitHub-Api-Version";
     private readonly HttpClient _httpClient;
     private readonly GitHubModelsOptions _options;
 
@@ -34,7 +36,8 @@ public sealed class GitHubModelsClient : IModelClient
         httpRequest.Headers.Authorization =
             new AuthenticationHeaderValue("Bearer", _options.Token);
         httpRequest.Headers.Accept.Add(
-            new MediaTypeWithQualityHeaderValue("application/json"));
+            new MediaTypeWithQualityHeaderValue(GitHubJsonMediaType));
+        httpRequest.Headers.Add(ApiVersionHeader, _options.ApiVersion);
 
         httpRequest.Content = JsonContent.Create(new
         {
@@ -61,6 +64,13 @@ public sealed class GitHubModelsClient : IModelClient
                 "GitHub Models request failed before a response was received.",
                 exception);
         }
+        catch (OperationCanceledException exception)
+            when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new ModelProviderException(
+                "GitHub Models request timed out before a response was received.",
+                exception);
+        }
 
         using (response)
         {
@@ -70,8 +80,7 @@ public sealed class GitHubModelsClient : IModelClient
             if (!response.IsSuccessStatusCode)
             {
                 throw new ModelProviderException(
-                    $"GitHub Models returned {(int)response.StatusCode} " +
-                    $"({response.ReasonPhrase}): {Abbreviate(responseBody)}");
+                    CreateFailureMessage(response, responseBody));
             }
 
             try
@@ -120,7 +129,8 @@ public sealed class GitHubModelsClient : IModelClient
         if (string.IsNullOrWhiteSpace(_options.Token))
         {
             throw new ModelProviderException(
-                "GITHUB_TOKEN is required for the github-models provider.");
+                "GITHUB_MODELS_TOKEN or GITHUB_TOKEN is required for the " +
+                "github-models provider.");
         }
 
         if (string.IsNullOrWhiteSpace(_options.Model))
@@ -133,6 +143,12 @@ public sealed class GitHubModelsClient : IModelClient
         {
             throw new ModelProviderException(
                 "GITHUB_MODELS_ENDPOINT must be an absolute URI.");
+        }
+
+        if (string.IsNullOrWhiteSpace(_options.ApiVersion))
+        {
+            throw new ModelProviderException(
+                "GITHUB_MODELS_API_VERSION is required for the github-models provider.");
         }
     }
 
@@ -149,20 +165,36 @@ public sealed class GitHubModelsClient : IModelClient
 
     private static string BuildUserMessage(ModelRequest request)
     {
-        var previousOutput = string.IsNullOrWhiteSpace(request.PreviousOutput)
-            ? "None"
-            : request.PreviousOutput;
+        var builder = new System.Text.StringBuilder()
+            .Append("Mode: ")
+            .AppendLine(request.ModeName)
+            .Append("Phase: ")
+            .AppendLine(request.PhaseName)
+            .AppendLine()
+            .AppendLine("Original input:")
+            .AppendLine(request.Input)
+            .AppendLine()
+            .AppendLine("Prior phase results:");
 
-        return $"""
-            Mode: {request.ModeName}
-            Phase: {request.PhaseName}
+        if (request.PriorPhaseResults.Count == 0)
+        {
+            return builder.AppendLine("None").ToString();
+        }
 
-            Original input:
-            {request.Input}
+        foreach (var result in request.PriorPhaseResults)
+        {
+            builder
+                .AppendLine()
+                .Append("Phase: ")
+                .Append(result.PhaseName)
+                .Append(" (")
+                .Append(result.PhaseKind.ToString().ToLowerInvariant())
+                .AppendLine(")")
+                .AppendLine("Output:")
+                .AppendLine(result.Content);
+        }
 
-            Previous phase output:
-            {previousOutput}
-            """;
+        return builder.ToString();
     }
 
     private static string Abbreviate(string value)
@@ -172,5 +204,24 @@ public sealed class GitHubModelsClient : IModelClient
         return normalized.Length <= limit
             ? normalized
             : string.Concat(normalized.AsSpan(0, limit), "...");
+    }
+
+    private static string CreateFailureMessage(
+        HttpResponseMessage response,
+        string responseBody)
+    {
+        var guidance = response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Unauthorized =>
+                " Check that GITHUB_TOKEN is valid.",
+            System.Net.HttpStatusCode.Forbidden =>
+                " Check that the token has the models:read permission.",
+            System.Net.HttpStatusCode.TooManyRequests =>
+                " GitHub Models rate limits may have been exceeded.",
+            _ => string.Empty
+        };
+
+        return $"GitHub Models returned {(int)response.StatusCode} " +
+            $"({response.ReasonPhrase}).{guidance} Response: {Abbreviate(responseBody)}";
     }
 }

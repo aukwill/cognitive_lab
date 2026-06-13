@@ -1,6 +1,6 @@
 {
-  "name": "challenge",
-  "description": "Stress-test a claim through assumptions, failure modes, and counterarguments.",
+  "name": "lens",
+  "description": "Explain a concept through a hobbyist's frame of reference, selected by the runtime via --lens.",
   "version": 1,
   "phases": [
     {
@@ -21,11 +21,11 @@
   ],
   "outputContract": {
     "requiredHeadings": [
-      "## Target Claim",
-      "## Assumptions",
-      "## Failure Modes",
-      "## Counterarguments",
-      "## Tests"
+      "## The Concept",
+      "## The Lens",
+      "## The Mapping",
+      "## Where It Breaks Down",
+      "## Plain Translation"
     ],
     "minimumLength": 200
   }

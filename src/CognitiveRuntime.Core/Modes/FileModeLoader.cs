@@ -25,9 +25,14 @@ public sealed class FileModeLoader : IModeLoader
 
     public async Task<LoadedMode> LoadAsync(
         string modeName,
+        string? lens = null,
         CancellationToken cancellationToken = default)
     {
         ValidateModeName(modeName);
+        if (lens is not null)
+        {
+            ValidateLensName(lens);
+        }
 
         var modeDirectory = ResolveChildPath(_modesRoot, modeName);
         if (!Directory.Exists(modeDirectory))
@@ -36,10 +41,17 @@ public sealed class FileModeLoader : IModeLoader
                 $"Mode '{modeName}' was not found under '{_modesRoot}'.");
         }
 
+        if (lens is not null && !Directory.Exists(Path.Combine(modeDirectory, "prompts", lens)))
+        {
+            throw new ModeLoadException(
+                $"Lens '{lens}' was not found for mode '{modeName}'.");
+        }
+
         var documentationPath = RequireFile(modeDirectory, "MODE.md");
         var manifestPath = RequireFile(modeDirectory, "mode.json");
-        RequireFile(modeDirectory, Path.Combine("prompts", "main.md"));
-        RequireFile(modeDirectory, Path.Combine("prompts", "critic.md"));
+        RequireFile(modeDirectory, ApplyLens("prompts/main.md", lens));
+        RequireFile(modeDirectory, ApplyLens("prompts/critic.md", lens));
+        RequireFile(modeDirectory, ApplyLens("prompts/revision.md", lens));
 
         ModeManifest manifest;
         try
@@ -61,7 +73,7 @@ public sealed class FileModeLoader : IModeLoader
         var phases = new List<LoadedPhase>(manifest.Phases.Count);
         foreach (var phase in manifest.Phases)
         {
-            var promptPath = RequireFile(modeDirectory, phase.Prompt);
+            var promptPath = RequireFile(modeDirectory, ApplyLens(phase.Prompt, lens));
             var prompt = await File.ReadAllTextAsync(promptPath, cancellationToken);
             if (string.IsNullOrWhiteSpace(prompt))
             {
@@ -91,6 +103,41 @@ public sealed class FileModeLoader : IModeLoader
         }
     }
 
+    private static void ValidateLensName(string lens)
+    {
+        if (string.IsNullOrWhiteSpace(lens) ||
+            lens.Any(character =>
+                !(char.IsAsciiLetterOrDigit(character) || character == '-')))
+        {
+            throw new ModeLoadException(
+                $"Lens name '{lens}' contains unsupported characters.");
+        }
+    }
+
+    /// <summary>
+    /// Rewrites a mode-relative prompt path to load from a lens-specific
+    /// subdirectory, e.g. <c>prompts/main.md</c> becomes
+    /// <c>prompts/warcraft/main.md</c> when <paramref name="lens"/> is
+    /// <c>warcraft</c>.
+    /// </summary>
+    private static string ApplyLens(string relativePath, string? lens)
+    {
+        if (string.IsNullOrEmpty(lens))
+        {
+            return relativePath;
+        }
+
+        const string promptsPrefix = "prompts/";
+        if (!relativePath.StartsWith(promptsPrefix, StringComparison.Ordinal))
+        {
+            throw new ModeLoadException(
+                $"Prompt path '{relativePath}' does not support a lens; " +
+                $"expected it to start with '{promptsPrefix}'.");
+        }
+
+        return promptsPrefix + lens + "/" + relativePath[promptsPrefix.Length..];
+    }
+
     private static void ValidateManifest(string requestedName, ModeManifest manifest)
     {
         if (!string.Equals(requestedName, manifest.Name, StringComparison.OrdinalIgnoreCase))
@@ -104,10 +151,18 @@ public sealed class FileModeLoader : IModeLoader
             throw new ModeLoadException("Mode description is required.");
         }
 
-        if (manifest.Phases.Count < 2)
+        var requiredPhaseOrder = new[]
+        {
+            PhaseKind.Main,
+            PhaseKind.Critic,
+            PhaseKind.Revision
+        };
+
+        if (manifest.Phases.Count != requiredPhaseOrder.Length)
         {
             throw new ModeLoadException(
-                "A mode must define at least a main phase and a critic phase.");
+                "A mode must define exactly three phases in this order: " +
+                "main, critic, revision.");
         }
 
         var duplicatePhase = manifest.Phases
@@ -130,19 +185,17 @@ public sealed class FileModeLoader : IModeLoader
             }
         }
 
-        var mainIndex = manifest.Phases.FindIndex(phase => phase.Kind == PhaseKind.Main);
-        var criticIndex = manifest.Phases.FindIndex(phase => phase.Kind == PhaseKind.Critic);
-
-        if (mainIndex < 0 || criticIndex < 0)
+        for (var index = 0; index < requiredPhaseOrder.Length; index++)
         {
-            throw new ModeLoadException(
-                "A mode must define both a main phase and a critic phase.");
-        }
-
-        if (criticIndex < mainIndex)
-        {
-            throw new ModeLoadException(
-                "The critic phase must run after the main phase.");
+            var expectedKind = requiredPhaseOrder[index];
+            var actualKind = manifest.Phases[index].Kind;
+            if (actualKind != expectedKind)
+            {
+                throw new ModeLoadException(
+                    $"Phase {index + 1} must be '{FormatKind(expectedKind)}' " +
+                    $"but was '{FormatKind(actualKind)}'. Required order: " +
+                    "main, critic, revision.");
+            }
         }
 
         if (manifest.OutputContract.MinimumLength < 1 ||
@@ -153,6 +206,9 @@ public sealed class FileModeLoader : IModeLoader
                 "The output contract requires a positive minimum length and at least one heading.");
         }
     }
+
+    private static string FormatKind(PhaseKind kind) =>
+        kind.ToString().ToLowerInvariant();
 
     private static string RequireFile(string root, string relativePath)
     {

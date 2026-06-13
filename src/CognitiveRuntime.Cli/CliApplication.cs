@@ -109,12 +109,19 @@ internal sealed class CliApplication
                 options.Mode,
                 input,
                 options.ModelProvider,
-                options.OutputRoot),
+                options.OutputRoot,
+                options.WriteHtmlView,
+                options.InputPath,
+                options.Lens),
             cancellationToken);
 
         Console.WriteLine($"Run ID: {result.RunId}");
         Console.WriteLine($"Output: {result.OutputDirectory}");
         Console.WriteLine($"Evaluation: {(result.EvalPassed ? "PASS" : "FAIL")}");
+        if (result.HtmlViewPath is not null)
+        {
+            Console.WriteLine($"HTML: {result.HtmlViewPath}");
+        }
 
         return result.EvalPassed ? 0 : 3;
     }
@@ -145,8 +152,12 @@ internal sealed class CliApplication
             new GitHubModelsOptions(
                 configuration["GITHUB_MODELS_ENDPOINT"]
                     ?? "https://models.github.ai/inference",
-                configuration["GITHUB_TOKEN"],
-                configuration["GITHUB_MODELS_MODEL"]));
+                configuration["GITHUB_MODELS_TOKEN"]
+                    ?? configuration["GITHUB_TOKEN"],
+                configuration["GITHUB_MODELS_MODEL"]
+                    ?? "openai/gpt-4.1",
+                configuration["GITHUB_MODELS_API_VERSION"]
+                    ?? "2026-03-10"));
         services.AddSingleton(
             new AzureFoundryOptions(
                 configuration["AZURE_FOUNDRY_ENDPOINT"],
@@ -157,8 +168,10 @@ internal sealed class CliApplication
         services.AddSingleton<IModeLoader>(
             _ => new FileModeLoader(options.ModesRoot));
         services.AddSingleton<IArtifactWriter, ArtifactWriter>();
+        services.AddSingleton<IRunViewWriter, HtmlRunViewWriter>();
         services.AddSingleton<ITraceSessionFactory, JsonTraceSessionFactory>();
         services.AddSingleton<OutputContractValidator>();
+        services.AddSingleton<LoopEfficacyEvaluator>();
         services.AddSingleton<IEvalRunner, EvalRunner>();
         services.AddSingleton<PhaseRunner>();
 
@@ -199,6 +212,10 @@ internal sealed class CliApplication
             "  --run-mode <provider>     mock, github-models, or azure-foundry.");
         writer.WriteLine("  --modes-root <path>       Defaults to ./modes.");
         writer.WriteLine("  --output-root <path>      Defaults to ./outputs.");
+        writer.WriteLine("  --html                    Write read-only index.html.");
+        writer.WriteLine(
+            "  --lens <name>             Prompt lens subdirectory " +
+            "(e.g. warcraft for the lens mode).");
         writer.WriteLine("  --help                    Show this help.");
     }
 }

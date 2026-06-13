@@ -3,6 +3,7 @@ using CognitiveRuntime.Core.Abstractions;
 using CognitiveRuntime.Core.Contracts;
 using CognitiveRuntime.Core.Evaluation;
 using CognitiveRuntime.Core.Exceptions;
+using CognitiveRuntime.Core.Views;
 
 namespace CognitiveRuntime.Core.Runtime;
 
@@ -14,6 +15,7 @@ public sealed class Orchestrator
     private readonly IArtifactWriter _artifactWriter;
     private readonly ITraceSessionFactory _traceSessionFactory;
     private readonly IEvalRunner _evalRunner;
+    private readonly IRunViewWriter _runViewWriter;
 
     public Orchestrator(
         IModeLoader modeLoader,
@@ -21,7 +23,8 @@ public sealed class Orchestrator
         PhaseRunner phaseRunner,
         IArtifactWriter artifactWriter,
         ITraceSessionFactory traceSessionFactory,
-        IEvalRunner evalRunner)
+        IEvalRunner evalRunner,
+        IRunViewWriter runViewWriter)
     {
         _modeLoader = modeLoader;
         _modelClientFactory = modelClientFactory;
@@ -29,6 +32,7 @@ public sealed class Orchestrator
         _artifactWriter = artifactWriter;
         _traceSessionFactory = traceSessionFactory;
         _evalRunner = evalRunner;
+        _runViewWriter = runViewWriter;
     }
 
     public async Task<RunResult> RunAsync(
@@ -69,6 +73,7 @@ public sealed class Orchestrator
 
             var mode = await _modeLoader.LoadAsync(
                 request.ModeName,
+                request.Lens,
                 cancellationToken);
             await trace.EmitAsync(
                 "mode.loaded",
@@ -76,13 +81,13 @@ public sealed class Orchestrator
                 {
                     ["name"] = mode.Manifest.Name,
                     ["version"] = mode.Manifest.Version,
-                    ["phaseCount"] = mode.Phases.Count
+                    ["phaseCount"] = mode.Phases.Count,
+                    ["lens"] = request.Lens
                 },
                 cancellationToken);
 
             var modelClient = _modelClientFactory.Resolve(request.ModelProvider);
             var phaseResults = new List<PhaseResult>(mode.Phases.Count);
-            string? previousOutput = null;
 
             foreach (var phase in mode.Phases)
             {
@@ -91,13 +96,12 @@ public sealed class Orchestrator
                     mode,
                     phase,
                     request.Input,
-                    previousOutput,
+                    Array.AsReadOnly(phaseResults.ToArray()),
                     modelClient,
                     trace,
                     cancellationToken);
 
                 phaseResults.Add(phaseResult);
-                previousOutput = phaseResult.Content;
             }
 
             var result = ResultComposer.Compose(mode, phaseResults);
@@ -151,7 +155,11 @@ public sealed class Orchestrator
                 cancellationToken);
 
             var evalReport = await _evalRunner.EvaluateAsync(
-                new EvalContext(artifacts, mode, trace.Events),
+                new EvalContext(
+                    artifacts,
+                    mode,
+                    trace.Events,
+                    Array.AsReadOnly(phaseResults.ToArray())),
                 cancellationToken);
 
             await trace.EmitAsync(
@@ -170,6 +178,27 @@ public sealed class Orchestrator
                 trace,
                 cancellationToken);
 
+            string? htmlViewPath = null;
+            if (request.WriteHtmlView)
+            {
+                var viewModel = RunViewModelFactory.Create(
+                    runId,
+                    request,
+                    mode,
+                    phaseResults,
+                    evalReport,
+                    artifacts,
+                    trace.Events);
+                htmlViewPath = await _runViewWriter.WriteAsync(
+                    viewModel,
+                    cancellationToken);
+                await TraceArtifactWrittenAsync(
+                    trace,
+                    htmlViewPath,
+                    "html",
+                    cancellationToken);
+            }
+
             await trace.EmitAsync(
                 "run.finalized",
                 new Dictionary<string, object?> { ["evalPassed"] = evalReport.Passed },
@@ -181,7 +210,8 @@ public sealed class Orchestrator
                 artifacts.ResultPath,
                 artifacts.TracePath,
                 artifacts.EvalReportPath,
-                evalReport.Passed);
+                evalReport.Passed,
+                htmlViewPath);
         }
         catch (Exception exception) when (exception is not RuntimeRunException)
         {
@@ -205,15 +235,26 @@ public sealed class Orchestrator
             kind,
             content,
             cancellationToken);
-        await trace.EmitAsync(
+        await TraceArtifactWrittenAsync(
+            trace,
+            artifacts.GetPath(kind),
+            kind.ToString().ToLowerInvariant(),
+            cancellationToken);
+    }
+
+    private static Task TraceArtifactWrittenAsync(
+        ITraceSession trace,
+        string path,
+        string kind,
+        CancellationToken cancellationToken) =>
+        trace.EmitAsync(
             "artifact.written",
             new Dictionary<string, object?>
             {
-                ["name"] = Path.GetFileName(artifacts.GetPath(kind)),
-                ["kind"] = kind.ToString().ToLowerInvariant()
+                ["name"] = Path.GetFileName(path),
+                ["kind"] = kind
             },
             cancellationToken);
-    }
 
     private async Task RecordFailureAsync(
         ITraceSession trace,
@@ -221,21 +262,6 @@ public sealed class Orchestrator
         string input,
         Exception exception)
     {
-        try
-        {
-            await trace.EmitAsync(
-                "run.failed",
-                new Dictionary<string, object?>
-                {
-                    ["exceptionType"] = exception.GetType().Name,
-                    ["message"] = exception.Message
-                });
-        }
-        catch
-        {
-            // Preserve the original exception when failure tracing also fails.
-        }
-
         await WriteFailureArtifactIfMissingAsync(
             artifacts,
             ArtifactKind.Input,
@@ -260,6 +286,21 @@ public sealed class Orchestrator
             $"Overall: **FAIL**{Environment.NewLine}{Environment.NewLine}" +
             "- [ ] run completed: The runtime failed before evaluation completed." +
             Environment.NewLine);
+
+        try
+        {
+            await trace.EmitAsync(
+                "run.failed",
+                new Dictionary<string, object?>
+                {
+                    ["exceptionType"] = exception.GetType().Name,
+                    ["message"] = exception.Message
+                });
+        }
+        catch
+        {
+            // Preserve the original exception when terminal failure tracing also fails.
+        }
     }
 
     private async Task WriteFailureArtifactIfMissingAsync(

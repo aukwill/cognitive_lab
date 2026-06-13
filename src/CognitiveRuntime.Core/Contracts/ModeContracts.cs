@@ -3,7 +3,8 @@ namespace CognitiveRuntime.Core.Contracts;
 public enum PhaseKind
 {
     Main,
-    Critic
+    Critic,
+    Revision
 }
 
 public sealed record ModeManifest

@@ -7,10 +7,14 @@ namespace CognitiveRuntime.Core.Evaluation;
 public sealed class EvalRunner : IEvalRunner
 {
     private readonly OutputContractValidator _outputContractValidator;
+    private readonly LoopEfficacyEvaluator _loopEfficacyEvaluator;
 
-    public EvalRunner(OutputContractValidator outputContractValidator)
+    public EvalRunner(
+        OutputContractValidator outputContractValidator,
+        LoopEfficacyEvaluator? loopEfficacyEvaluator = null)
     {
         _outputContractValidator = outputContractValidator;
+        _loopEfficacyEvaluator = loopEfficacyEvaluator ?? new LoopEfficacyEvaluator();
     }
 
     public async Task<EvalReport> EvaluateAsync(
@@ -22,6 +26,15 @@ public sealed class EvalRunner : IEvalRunner
                 context.Artifacts.ResultPath,
                 cancellationToken)
             : string.Empty;
+        var main = context.PhaseResults.SingleOrDefault(
+            phaseResult => phaseResult.PhaseKind == PhaseKind.Main);
+        var critic = context.PhaseResults.SingleOrDefault(
+            phaseResult => phaseResult.PhaseKind == PhaseKind.Critic);
+        var revision = context.PhaseResults.SingleOrDefault(
+            phaseResult => phaseResult.PhaseKind == PhaseKind.Revision);
+        var mainContent = main?.Content ?? string.Empty;
+        var criticContent = critic?.Content ?? string.Empty;
+        var revisionContent = revision?.Content ?? string.Empty;
 
         var events = context.TraceEvents;
         var checks = new List<EvalCheckResult>
@@ -30,14 +43,26 @@ public sealed class EvalRunner : IEvalRunner
             CheckTraceEvent(events, "run.started"),
             CheckTraceEvent(events, "run.completed"),
             CheckTraceEvent(events, "critic.completed", "critic phase ran"),
+            CheckTraceEvent(events, "revision.completed", "revision phase ran"),
             new(
                 "result is not empty",
                 !string.IsNullOrWhiteSpace(result),
                 string.IsNullOrWhiteSpace(result)
                     ? "result.md is empty."
                     : "result.md contains content."),
+            new(
+                "revision is not empty",
+                !string.IsNullOrWhiteSpace(revisionContent),
+                string.IsNullOrWhiteSpace(revisionContent)
+                    ? "The authoritative revision is empty."
+                    : "The authoritative revision contains content."),
             _outputContractValidator.Validate(
-                result,
+                revisionContent,
+                context.Mode.Manifest.OutputContract),
+            _loopEfficacyEvaluator.Evaluate(
+                mainContent,
+                criticContent,
+                revisionContent,
                 context.Mode.Manifest.OutputContract)
         };
 

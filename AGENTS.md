@@ -336,6 +336,8 @@ A task is done only when:
 6. Eval report is written.
 7. Provider-specific code is isolated.
 8. README instructions still work.
+9. The completion response includes concrete instructions for human evaluation
+   of the finished task.
 
 ## Working Principle
 

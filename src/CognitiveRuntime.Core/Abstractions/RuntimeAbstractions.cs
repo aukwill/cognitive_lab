@@ -1,10 +1,14 @@
 using CognitiveRuntime.Core.Contracts;
+using CognitiveRuntime.Core.Views;
 
 namespace CognitiveRuntime.Core.Abstractions;
 
 public interface IModeLoader
 {
-    Task<LoadedMode> LoadAsync(string modeName, CancellationToken cancellationToken = default);
+    Task<LoadedMode> LoadAsync(
+        string modeName,
+        string? lens = null,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IModelClient
@@ -78,5 +82,12 @@ public interface IEvalRunner
 {
     Task<EvalReport> EvaluateAsync(
         EvalContext context,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IRunViewWriter
+{
+    Task<string> WriteAsync(
+        RunViewModel viewModel,
         CancellationToken cancellationToken = default);
 }

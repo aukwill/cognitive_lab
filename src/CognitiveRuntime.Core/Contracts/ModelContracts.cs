@@ -7,7 +7,7 @@ public sealed record ModelRequest(
     PhaseKind PhaseKind,
     string Prompt,
     string Input,
-    string? PreviousOutput);
+    IReadOnlyList<PhaseResult> PriorPhaseResults);
 
 public sealed record ModelResponse(
     string Content,
@@ -17,7 +17,8 @@ public sealed record ModelResponse(
 public sealed record GitHubModelsOptions(
     string Endpoint,
     string? Token,
-    string? Model);
+    string? Model,
+    string ApiVersion = "2026-03-10");
 
 public sealed record AzureFoundryOptions(
     string? Endpoint,
