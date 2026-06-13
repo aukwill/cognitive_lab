@@ -10,8 +10,14 @@ internal sealed record CliOptions(
     string OutputRoot,
     bool WriteHtmlView,
     bool ShowHelp,
-    string? Lens = null)
+    string? Lens = null,
+    string Pattern = "critic-revision",
+    IReadOnlyList<string>? PipelineStages = null)
 {
+    private static readonly HashSet<string> KnownPatterns = new(
+        ["single-pass", "critic-revision", "linear-pipeline"],
+        StringComparer.OrdinalIgnoreCase);
+
     public static CliOptions Parse(
         IReadOnlyList<string> args,
         IConfiguration configuration)
@@ -59,7 +65,39 @@ internal sealed record CliOptions(
         EnsureKnownOptions(values.Keys);
 
         var currentDirectory = Environment.CurrentDirectory;
-        var mode = Require(values, "--mode");
+        var pattern = values.GetValueOrDefault("--pattern") ?? "critic-revision";
+        if (!KnownPatterns.Contains(pattern))
+        {
+            var available = string.Join(", ", KnownPatterns.Order());
+            throw new CliUsageException(
+                $"Unknown pattern '{pattern}'. Available patterns: {available}.");
+        }
+
+        var pipelineStages = ParsePipelineStages(values);
+        var isLinearPipeline = string.Equals(
+            pattern, "linear-pipeline", StringComparison.OrdinalIgnoreCase);
+
+        if (isLinearPipeline && pipelineStages is null)
+        {
+            throw new CliUsageException(
+                "'--pattern linear-pipeline' requires '--pipeline <mode,mode,...>'.");
+        }
+
+        if (!isLinearPipeline && pipelineStages is not null)
+        {
+            throw new CliUsageException(
+                "'--pipeline' requires '--pattern linear-pipeline'.");
+        }
+
+        if (isLinearPipeline && values.ContainsKey("--html"))
+        {
+            throw new CliUsageException(
+                "'--html' is not yet supported with '--pattern linear-pipeline'.");
+        }
+
+        var mode = isLinearPipeline
+            ? values.GetValueOrDefault("--mode") ?? "pipeline"
+            : Require(values, "--mode");
         var inputPath = Path.GetFullPath(Require(values, "--input"));
         var provider = GetValue(values, "--run-mode", "--model-provider")
             ?? configuration["MODEL_PROVIDER"]
@@ -80,7 +118,31 @@ internal sealed record CliOptions(
             outputRoot,
             values.ContainsKey("--html"),
             ShowHelp: false,
-            Lens: string.IsNullOrWhiteSpace(lens) ? null : lens);
+            Lens: string.IsNullOrWhiteSpace(lens) ? null : lens,
+            Pattern: pattern,
+            PipelineStages: pipelineStages);
+    }
+
+    private static IReadOnlyList<string>? ParsePipelineStages(
+        IReadOnlyDictionary<string, string> values)
+    {
+        if (!values.TryGetValue("--pipeline", out var rawValue))
+        {
+            return null;
+        }
+
+        var stages = rawValue
+            .Split(',', StringSplitOptions.TrimEntries)
+            .ToArray();
+
+        if (stages.Any(string.IsNullOrEmpty))
+        {
+            throw new CliUsageException(
+                "'--pipeline' must be a comma-separated list of mode names " +
+                "with no empty entries.");
+        }
+
+        return stages;
     }
 
     private static bool IsHelpFlag(string value) =>
@@ -98,7 +160,9 @@ internal sealed record CliOptions(
                 "--modes-root",
                 "--output-root",
                 "--html",
-                "--lens"
+                "--lens",
+                "--pattern",
+                "--pipeline"
             ],
             StringComparer.OrdinalIgnoreCase);
 

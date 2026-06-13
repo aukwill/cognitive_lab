@@ -7,7 +7,9 @@ public sealed record RunRequest(
     string OutputRoot,
     bool WriteHtmlView = false,
     string? InputSource = null,
-    string? Lens = null);
+    string? Lens = null,
+    string Pattern = "critic-revision",
+    IReadOnlyList<string>? PipelineStages = null);
 
 /// <summary>
 /// The terminal outcome of a run. The runtime, not the model, decides this

@@ -17,7 +17,7 @@ public sealed class Orchestrator
     private readonly ITraceSessionFactory _traceSessionFactory;
     private readonly IEvalRunner _evalRunner;
     private readonly IRunViewWriter _runViewWriter;
-    private readonly IOrchestrationPattern _pattern;
+    private readonly IOrchestrationPatternFactory _patternFactory;
 
     public Orchestrator(
         IModeLoader modeLoader,
@@ -27,7 +27,7 @@ public sealed class Orchestrator
         ITraceSessionFactory traceSessionFactory,
         IEvalRunner evalRunner,
         IRunViewWriter runViewWriter,
-        IOrchestrationPattern pattern)
+        IOrchestrationPatternFactory patternFactory)
     {
         _modeLoader = modeLoader;
         _modelClientFactory = modelClientFactory;
@@ -36,7 +36,7 @@ public sealed class Orchestrator
         _traceSessionFactory = traceSessionFactory;
         _evalRunner = evalRunner;
         _runViewWriter = runViewWriter;
-        _pattern = pattern;
+        _patternFactory = patternFactory;
     }
 
     public async Task<RunResult> RunAsync(
@@ -44,6 +44,13 @@ public sealed class Orchestrator
         CancellationToken cancellationToken = default)
     {
         ValidateRequest(request);
+
+        if (string.Equals(request.Pattern, "linear-pipeline", StringComparison.OrdinalIgnoreCase))
+        {
+            return await RunPipelineAsync(request, cancellationToken);
+        }
+
+        var pattern = _patternFactory.Resolve(request.Pattern);
 
         var runId = Guid.NewGuid().ToString("N");
         var artifacts = await _artifactWriter.PrepareRunAsync(
@@ -65,7 +72,7 @@ public sealed class Orchestrator
                     ["mode"] = request.ModeName,
                     ["provider"] = request.ModelProvider,
                     ["outputDirectory"] = artifacts.RunDirectory,
-                    ["pattern"] = _pattern.Name
+                    ["pattern"] = pattern.Name
                 },
                 cancellationToken);
 
@@ -92,12 +99,12 @@ public sealed class Orchestrator
                 cancellationToken);
 
             var modelClient = _modelClientFactory.Resolve(request.ModelProvider);
-            var steps = _pattern.Plan(mode);
+            var steps = pattern.Plan(mode);
             var phaseResults = new List<PhaseResult>(steps.Count);
 
             foreach (var step in steps)
             {
-                var context = _pattern.SelectContext(
+                var context = pattern.SelectContext(
                     step,
                     Array.AsReadOnly(phaseResults.ToArray()));
 
@@ -128,7 +135,7 @@ public sealed class Orchestrator
                 mode,
                 phaseResults,
                 artifacts,
-                _pattern.Name);
+                pattern.Name);
             await WriteArtifactAsync(
                 artifacts,
                 ArtifactKind.RunSummary,
@@ -223,6 +230,149 @@ public sealed class Orchestrator
                 artifacts.EvalReportPath,
                 evalReport.Passed ? RunOutcome.Success : RunOutcome.EvalFailed,
                 htmlViewPath);
+        }
+        catch (Exception exception) when (exception is not RuntimeRunException)
+        {
+            await RecordFailureAsync(trace, artifacts, request.Input, exception);
+            throw new RuntimeRunException(
+                $"Run '{runId}' failed: {exception.Message}",
+                artifacts.RunDirectory,
+                exception);
+        }
+    }
+
+    private async Task<RunResult> RunPipelineAsync(
+        RunRequest request,
+        CancellationToken cancellationToken)
+    {
+        var pipeline = new LinearPipelinePattern(request.PipelineStages!);
+
+        var runId = Guid.NewGuid().ToString("N");
+        var artifacts = await _artifactWriter.PrepareRunAsync(
+            request.OutputRoot,
+            request.ModeName,
+            runId,
+            cancellationToken);
+        var trace = await _traceSessionFactory.CreateAsync(
+            runId,
+            artifacts.TracePath,
+            cancellationToken);
+
+        try
+        {
+            await trace.EmitAsync(
+                "run.started",
+                new Dictionary<string, object?>
+                {
+                    ["mode"] = request.ModeName,
+                    ["provider"] = request.ModelProvider,
+                    ["outputDirectory"] = artifacts.RunDirectory,
+                    ["pattern"] = pipeline.Name,
+                    ["stages"] = pipeline.StageModeNames
+                },
+                cancellationToken);
+
+            await WriteArtifactAsync(
+                artifacts,
+                ArtifactKind.Input,
+                $"# Input{Environment.NewLine}{Environment.NewLine}{request.Input.Trim()}{Environment.NewLine}",
+                trace,
+                cancellationToken);
+
+            var modelClient = _modelClientFactory.Resolve(request.ModelProvider);
+            var stages = await pipeline.RunAsync(
+                runId,
+                request.Input,
+                _modeLoader,
+                modelClient,
+                _phaseRunner,
+                _artifactWriter,
+                artifacts,
+                trace,
+                cancellationToken);
+
+            var lastStage = stages[^1];
+
+            await WriteArtifactAsync(
+                artifacts,
+                ArtifactKind.Result,
+                lastStage.ResultContent,
+                trace,
+                cancellationToken);
+
+            var summary = RenderPipelineRunSummary(runId, request, pipeline, stages, artifacts);
+            await WriteArtifactAsync(
+                artifacts,
+                ArtifactKind.RunSummary,
+                summary,
+                trace,
+                cancellationToken);
+
+            // Reserve the self-referential eval artifact before checking artifact existence.
+            await _artifactWriter.WriteAsync(
+                artifacts,
+                ArtifactKind.EvalReport,
+                "# Evaluation Report\n\nEvaluation has not run yet.\n",
+                cancellationToken);
+            await trace.EmitAsync(
+                "artifact.reserved",
+                new Dictionary<string, object?>
+                {
+                    ["name"] = Path.GetFileName(artifacts.EvalReportPath)
+                },
+                cancellationToken);
+
+            await trace.EmitAsync(
+                "run.completed",
+                new Dictionary<string, object?>
+                {
+                    ["pattern"] = pipeline.Name,
+                    ["stageCount"] = stages.Count
+                },
+                cancellationToken);
+
+            await trace.EmitAsync(
+                "eval.started",
+                new Dictionary<string, object?>(),
+                cancellationToken);
+
+            var evalReport = await _evalRunner.EvaluateAsync(
+                new EvalContext(
+                    artifacts,
+                    lastStage.Mode,
+                    trace.Events,
+                    lastStage.PhaseResults),
+                cancellationToken);
+
+            await trace.EmitAsync(
+                "eval.completed",
+                new Dictionary<string, object?>
+                {
+                    ["passed"] = evalReport.Passed,
+                    ["checkCount"] = evalReport.Checks.Count
+                },
+                cancellationToken);
+
+            await WriteArtifactAsync(
+                artifacts,
+                ArtifactKind.EvalReport,
+                EvalRunner.RenderMarkdown(evalReport),
+                trace,
+                cancellationToken);
+
+            await trace.EmitAsync(
+                "run.finalized",
+                new Dictionary<string, object?> { ["evalPassed"] = evalReport.Passed },
+                cancellationToken);
+
+            return new RunResult(
+                runId,
+                artifacts.RunDirectory,
+                artifacts.ResultPath,
+                artifacts.TracePath,
+                artifacts.EvalReportPath,
+                evalReport.Passed ? RunOutcome.Success : RunOutcome.EvalFailed,
+                HtmlViewPath: null);
         }
         catch (Exception exception) when (exception is not RuntimeRunException)
         {
@@ -360,6 +510,42 @@ public sealed class Orchestrator
             builder.AppendLine(
                 $"- `{phase.PhaseName}` ({phase.PhaseKind.ToString().ToLowerInvariant()}): " +
                 $"{phase.Content.Length} characters via `{phase.Provider}`.");
+        }
+
+        builder
+            .AppendLine()
+            .AppendLine("Evaluation is recorded in `eval_report.md`.");
+
+        return builder.ToString();
+    }
+
+    private static string RenderPipelineRunSummary(
+        string runId,
+        RunRequest request,
+        LinearPipelinePattern pipeline,
+        IReadOnlyList<PipelineStageResult> stages,
+        RunArtifactPaths artifacts)
+    {
+        var builder = new StringBuilder()
+            .AppendLine("# Run Summary")
+            .AppendLine()
+            .AppendLine($"- Run ID: `{runId}`")
+            .AppendLine($"- Pattern: `{pipeline.Name}`")
+            .AppendLine($"- Pipeline stages: `{string.Join(" -> ", pipeline.StageModeNames)}`")
+            .AppendLine($"- Model provider: `{request.ModelProvider}`")
+            .AppendLine($"- Output directory: `{artifacts.RunDirectory}`")
+            .AppendLine($"- Stages run: {stages.Count}")
+            .AppendLine()
+            .AppendLine("## Stage Results")
+            .AppendLine();
+
+        foreach (var stage in stages)
+        {
+            var stageDirectory = Path.GetRelativePath(artifacts.RunDirectory, stage.StageDirectory)
+                .Replace('\\', '/');
+            builder.AppendLine(
+                $"- Stage {stage.StageIndex:D2} (`{stage.ModeName}`): " +
+                $"{stage.PhaseResults.Count} phases, artifacts in `{stageDirectory}/`.");
         }
 
         builder

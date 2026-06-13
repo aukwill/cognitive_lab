@@ -10,8 +10,8 @@ public static class ResultComposer
         IReadOnlyList<PhaseResult> phaseResults)
     {
         var mainResult = GetSingleResult(phaseResults, PhaseKind.Main);
-        var criticResult = GetSingleResult(phaseResults, PhaseKind.Critic);
-        var revisionResult = GetSingleResult(phaseResults, PhaseKind.Revision);
+        var criticResult = GetOptionalResult(phaseResults, PhaseKind.Critic);
+        var revisionResult = GetOptionalResult(phaseResults, PhaseKind.Revision);
 
         var title = char.ToUpperInvariant(mode.Manifest.Name[0]) +
             mode.Manifest.Name[1..];
@@ -21,18 +21,33 @@ public static class ResultComposer
             .AppendLine(" Result")
             .AppendLine();
 
-        builder
-            .AppendLine("## Authoritative Revision")
-            .AppendLine()
-            .AppendLine(revisionResult.Content.Trim())
-            .AppendLine()
-            .AppendLine("## Initial Draft")
-            .AppendLine()
-            .AppendLine(mainResult.Content.Trim())
-            .AppendLine()
-            .AppendLine("## Critic Review")
-            .AppendLine()
-            .AppendLine(criticResult.Content.Trim());
+        if (revisionResult is not null)
+        {
+            builder
+                .AppendLine("## Authoritative Revision")
+                .AppendLine()
+                .AppendLine(revisionResult.Content.Trim())
+                .AppendLine()
+                .AppendLine("## Initial Draft")
+                .AppendLine()
+                .AppendLine(mainResult.Content.Trim());
+        }
+        else
+        {
+            builder
+                .AppendLine("## Authoritative Result")
+                .AppendLine()
+                .AppendLine(mainResult.Content.Trim());
+        }
+
+        if (criticResult is not null)
+        {
+            builder
+                .AppendLine()
+                .AppendLine("## Critic Review")
+                .AppendLine()
+                .AppendLine(criticResult.Content.Trim());
+        }
 
         return builder.ToString();
     }
@@ -53,5 +68,23 @@ public static class ResultComposer
         }
 
         return matches[0];
+    }
+
+    private static PhaseResult? GetOptionalResult(
+        IReadOnlyList<PhaseResult> phaseResults,
+        PhaseKind phaseKind)
+    {
+        var matches = phaseResults
+            .Where(result => result.PhaseKind == phaseKind)
+            .ToArray();
+
+        if (matches.Length > 1)
+        {
+            throw new InvalidOperationException(
+                $"Expected at most one {phaseKind.ToString().ToLowerInvariant()} " +
+                $"phase result, but found {matches.Length}.");
+        }
+
+        return matches.Length == 1 ? matches[0] : null;
     }
 }

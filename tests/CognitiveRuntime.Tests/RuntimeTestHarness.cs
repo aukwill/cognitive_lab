@@ -19,7 +19,7 @@ internal static class RuntimeTestHarness
         IEvalRunner? evalRunner = null,
         ITraceSessionFactory? traceSessionFactory = null,
         IRunViewWriter? runViewWriter = null,
-        IOrchestrationPattern? pattern = null)
+        IOrchestrationPatternFactory? patternFactory = null)
     {
         IModelClient[] modelClients = [modelClient ?? new MockModelClient()];
 
@@ -31,7 +31,8 @@ internal static class RuntimeTestHarness
             traceSessionFactory ?? new JsonTraceSessionFactory(timeProvider),
             evalRunner ?? new EvalRunner(new OutputContractValidator()),
             runViewWriter ?? new HtmlRunViewWriter(),
-            pattern ?? new CriticRevisionPattern());
+            patternFactory ?? new OrchestrationPatternFactory(
+                [new CriticRevisionPattern(), new SinglePassPattern()]));
     }
 
     public static void AssertRequiredArtifactsExist(string outputDirectory)

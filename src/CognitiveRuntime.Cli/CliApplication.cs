@@ -113,7 +113,9 @@ internal sealed class CliApplication
                 options.OutputRoot,
                 options.WriteHtmlView,
                 options.InputPath,
-                options.Lens),
+                options.Lens,
+                options.Pattern,
+                options.PipelineStages),
             cancellationToken);
 
         Console.WriteLine($"Run ID: {result.RunId}");
@@ -177,6 +179,8 @@ internal sealed class CliApplication
         services.AddSingleton<IEvalRunner, EvalRunner>();
         services.AddSingleton<PhaseRunner>();
         services.AddSingleton<IOrchestrationPattern, CriticRevisionPattern>();
+        services.AddSingleton<IOrchestrationPattern, SinglePassPattern>();
+        services.AddSingleton<IOrchestrationPatternFactory, OrchestrationPatternFactory>();
 
         services.AddSingleton<IModelClient, MockModelClient>();
         services.AddSingleton<IModelClient>(
@@ -219,6 +223,11 @@ internal sealed class CliApplication
         writer.WriteLine(
             "  --lens <name>             Prompt lens subdirectory " +
             "(e.g. warcraft for the lens mode).");
+        writer.WriteLine(
+            "  --pattern <name>          Orchestration pattern: single-pass, " +
+            "critic-revision (default), or linear-pipeline.");
+        writer.WriteLine(
+            "  --pipeline <mode,mode,..> Stage modes for --pattern linear-pipeline.");
         writer.WriteLine("  --help                    Show this help.");
     }
 }
