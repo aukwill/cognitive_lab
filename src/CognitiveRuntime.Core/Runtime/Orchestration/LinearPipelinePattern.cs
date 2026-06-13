@@ -58,6 +58,15 @@ public sealed class LinearPipelinePattern
             var stageIndex = index + 1;
             var modeName = StageModeNames[index];
 
+            await trace.EmitAsync(
+                "stage.started",
+                new Dictionary<string, object?>
+                {
+                    ["stageIndex"] = stageIndex,
+                    ["mode"] = modeName
+                },
+                cancellationToken);
+
             var mode = await modeLoader.LoadAsync(modeName, cancellationToken: cancellationToken);
 
             var steps = StagePattern.Plan(mode);
@@ -81,6 +90,16 @@ public sealed class LinearPipelinePattern
 
                 phaseResults.Add(phaseResult);
             }
+
+            await trace.EmitAsync(
+                "stage.completed",
+                new Dictionary<string, object?>
+                {
+                    ["stageIndex"] = stageIndex,
+                    ["mode"] = modeName,
+                    ["phaseCount"] = phaseResults.Count
+                },
+                cancellationToken);
 
             var resultContent = ResultComposer.Compose(mode, phaseResults);
             var revisionContent = phaseResults

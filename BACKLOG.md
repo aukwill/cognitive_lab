@@ -61,7 +61,7 @@ to be one reviewable pull request.
 - [x] `OP-003` Implement `CriticRevisionPattern` on top of `IOrchestrationPattern`.
 - [x] `OP-004` Implement `LinearPipelinePattern`.
 - [x] `OP-005` Add pattern selection to the CLI.
-- [ ] `OP-006` Trace pattern lifecycle.
+- [x] `OP-006` Trace pattern lifecycle.
 - [ ] `OP-007` Write a `pattern.md` artifact.
 - [ ] `OP-008` Show the pattern graph in static HTML.
 - [ ] `OP-009` Add mock outputs for each pattern.

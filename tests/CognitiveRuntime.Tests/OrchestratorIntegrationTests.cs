@@ -82,6 +82,8 @@ public sealed class OrchestratorIntegrationTests
 
         Assert.Contains("run.started", eventTypes);
         Assert.Contains("mode.loaded", eventTypes);
+        Assert.Contains("pattern.started", eventTypes);
+        Assert.Contains("pattern.completed", eventTypes);
         Assert.Contains("phase.started", eventTypes);
         Assert.Contains("model.called", eventTypes);
         Assert.Contains("model.completed", eventTypes);
@@ -136,6 +138,33 @@ public sealed class OrchestratorIntegrationTests
         Assert.True(revisionStartedIndex < revisionModelCalledIndex);
         Assert.True(revisionModelCalledIndex < revisionModelCompletedIndex);
         Assert.True(revisionModelCompletedIndex < revisionCompletedIndex);
+
+        var patternStartedEvent = traceEvents.Single(
+            traceEvent => traceEvent.GetProperty("type").GetString() == "pattern.started");
+        var patternStartedData = patternStartedEvent.GetProperty("data");
+        Assert.Equal("critic-revision", patternStartedData.GetProperty("pattern").GetString());
+
+        var stepDescriptors = patternStartedData.GetProperty("steps").EnumerateArray().ToArray();
+        Assert.Equal(
+            ["main", "critic", "revision"],
+            stepDescriptors.Select(step => step.GetProperty("name").GetString() ?? string.Empty).ToArray());
+        Assert.Equal(
+            ["main", "critic", "revision"],
+            stepDescriptors.Select(step => step.GetProperty("kind").GetString() ?? string.Empty).ToArray());
+
+        var patternCompletedEvent = traceEvents.Single(
+            traceEvent => traceEvent.GetProperty("type").GetString() == "pattern.completed");
+        var patternCompletedData = patternCompletedEvent.GetProperty("data");
+        Assert.Equal("critic-revision", patternCompletedData.GetProperty("pattern").GetString());
+        Assert.Equal(3, patternCompletedData.GetProperty("stepCount").GetInt32());
+
+        var patternStartedIndex = Array.IndexOf(traceEvents, patternStartedEvent);
+        var patternCompletedIndex = Array.IndexOf(traceEvents, patternCompletedEvent);
+        var firstPhaseStartedIndex = Array.FindIndex(
+            eventTypes, eventType => eventType == "phase.started");
+
+        Assert.True(patternStartedIndex < firstPhaseStartedIndex);
+        Assert.True(patternCompletedIndex > revisionCompletedIndex);
     }
 
     [Fact]

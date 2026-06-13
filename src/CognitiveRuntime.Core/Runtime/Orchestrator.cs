@@ -100,6 +100,22 @@ public sealed class Orchestrator
 
             var modelClient = _modelClientFactory.Resolve(request.ModelProvider);
             var steps = pattern.Plan(mode);
+
+            await trace.EmitAsync(
+                "pattern.started",
+                new Dictionary<string, object?>
+                {
+                    ["pattern"] = pattern.Name,
+                    ["steps"] = steps
+                        .Select(step => new Dictionary<string, object?>
+                        {
+                            ["name"] = step.Name,
+                            ["kind"] = step.Kind.ToString().ToLowerInvariant()
+                        })
+                        .ToArray()
+                },
+                cancellationToken);
+
             var phaseResults = new List<PhaseResult>(steps.Count);
 
             foreach (var step in steps)
@@ -120,6 +136,15 @@ public sealed class Orchestrator
 
                 phaseResults.Add(phaseResult);
             }
+
+            await trace.EmitAsync(
+                "pattern.completed",
+                new Dictionary<string, object?>
+                {
+                    ["pattern"] = pattern.Name,
+                    ["stepCount"] = phaseResults.Count
+                },
+                cancellationToken);
 
             var result = ResultComposer.Compose(mode, phaseResults);
             await WriteArtifactAsync(
@@ -279,6 +304,15 @@ public sealed class Orchestrator
                 trace,
                 cancellationToken);
 
+            await trace.EmitAsync(
+                "pattern.started",
+                new Dictionary<string, object?>
+                {
+                    ["pattern"] = pipeline.Name,
+                    ["stages"] = pipeline.StageModeNames
+                },
+                cancellationToken);
+
             var modelClient = _modelClientFactory.Resolve(request.ModelProvider);
             var stages = await pipeline.RunAsync(
                 runId,
@@ -289,6 +323,15 @@ public sealed class Orchestrator
                 _artifactWriter,
                 artifacts,
                 trace,
+                cancellationToken);
+
+            await trace.EmitAsync(
+                "pattern.completed",
+                new Dictionary<string, object?>
+                {
+                    ["pattern"] = pipeline.Name,
+                    ["stageCount"] = stages.Count
+                },
                 cancellationToken);
 
             var lastStage = stages[^1];

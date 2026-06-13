@@ -75,6 +75,49 @@ public sealed class PipelineOrchestratorTests
         Assert.Contains("eval.completed", eventTypes);
         Assert.Contains("run.finalized", eventTypes);
         Assert.Equal("run.finalized", eventTypes[^1]);
+
+        var patternStartedEvent = traceEvents.Single(
+            traceEvent => traceEvent.GetProperty("type").GetString() == "pattern.started");
+        var patternStartedData = patternStartedEvent.GetProperty("data");
+        Assert.Equal("linear-pipeline", patternStartedData.GetProperty("pattern").GetString());
+        Assert.Equal(
+            ["frame", "challenge"],
+            patternStartedData.GetProperty("stages").EnumerateArray()
+                .Select(stage => stage.GetString() ?? string.Empty)
+                .ToArray());
+
+        var patternCompletedEvent = traceEvents.Single(
+            traceEvent => traceEvent.GetProperty("type").GetString() == "pattern.completed");
+        var patternCompletedData = patternCompletedEvent.GetProperty("data");
+        Assert.Equal("linear-pipeline", patternCompletedData.GetProperty("pattern").GetString());
+        Assert.Equal(2, patternCompletedData.GetProperty("stageCount").GetInt32());
+
+        var stageStartedEvents = traceEvents
+            .Where(traceEvent => traceEvent.GetProperty("type").GetString() == "stage.started")
+            .ToArray();
+        var stageCompletedEvents = traceEvents
+            .Where(traceEvent => traceEvent.GetProperty("type").GetString() == "stage.completed")
+            .ToArray();
+
+        Assert.Equal(2, stageStartedEvents.Length);
+        Assert.Equal(2, stageCompletedEvents.Length);
+        Assert.Equal([1, 2], stageStartedEvents.Select(e => e.GetProperty("data").GetProperty("stageIndex").GetInt32()).ToArray());
+        Assert.Equal(["frame", "challenge"], stageStartedEvents.Select(e => e.GetProperty("data").GetProperty("mode").GetString() ?? string.Empty).ToArray());
+        Assert.Equal([1, 2], stageCompletedEvents.Select(e => e.GetProperty("data").GetProperty("stageIndex").GetInt32()).ToArray());
+        Assert.Equal(["frame", "challenge"], stageCompletedEvents.Select(e => e.GetProperty("data").GetProperty("mode").GetString() ?? string.Empty).ToArray());
+
+        var patternStartedIndex = Array.IndexOf(traceEvents, patternStartedEvent);
+        var patternCompletedIndex = Array.IndexOf(traceEvents, patternCompletedEvent);
+        var stage1StartedIndex = Array.IndexOf(traceEvents, stageStartedEvents[0]);
+        var stage1CompletedIndex = Array.IndexOf(traceEvents, stageCompletedEvents[0]);
+        var stage2StartedIndex = Array.IndexOf(traceEvents, stageStartedEvents[1]);
+        var stage2CompletedIndex = Array.IndexOf(traceEvents, stageCompletedEvents[1]);
+
+        Assert.True(patternStartedIndex < stage1StartedIndex);
+        Assert.True(stage1StartedIndex < stage1CompletedIndex);
+        Assert.True(stage1CompletedIndex < stage2StartedIndex);
+        Assert.True(stage2StartedIndex < stage2CompletedIndex);
+        Assert.True(stage2CompletedIndex < patternCompletedIndex);
     }
 
     [Fact]
@@ -105,5 +148,28 @@ public sealed class PipelineOrchestratorTests
         Assert.DoesNotContain("critic.started", eventTypes);
         Assert.DoesNotContain("revision.started", eventTypes);
         Assert.Contains("run.finalized", eventTypes);
+
+        await using var traceStream = File.OpenRead(result.TracePath);
+        using var traceDocument = await JsonDocument.ParseAsync(traceStream);
+        var traceEvents = traceDocument.RootElement
+            .GetProperty("events")
+            .EnumerateArray()
+            .ToArray();
+
+        var patternStartedEvent = traceEvents.Single(
+            traceEvent => traceEvent.GetProperty("type").GetString() == "pattern.started");
+        var patternStartedData = patternStartedEvent.GetProperty("data");
+        Assert.Equal("single-pass", patternStartedData.GetProperty("pattern").GetString());
+
+        var stepDescriptors = patternStartedData.GetProperty("steps").EnumerateArray().ToArray();
+        Assert.Single(stepDescriptors);
+        Assert.Equal("main", stepDescriptors[0].GetProperty("name").GetString());
+        Assert.Equal("main", stepDescriptors[0].GetProperty("kind").GetString());
+
+        var patternCompletedEvent = traceEvents.Single(
+            traceEvent => traceEvent.GetProperty("type").GetString() == "pattern.completed");
+        var patternCompletedData = patternCompletedEvent.GetProperty("data");
+        Assert.Equal("single-pass", patternCompletedData.GetProperty("pattern").GetString());
+        Assert.Equal(1, patternCompletedData.GetProperty("stepCount").GetInt32());
     }
 }
