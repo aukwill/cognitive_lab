@@ -24,19 +24,7 @@ public sealed class ArtifactWriter : IArtifactWriter
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var safeModeName = new string(
-            modeName
-                .Where(character =>
-                    char.IsAsciiLetterOrDigit(character) || character == '-')
-                .ToArray());
-
-        if (safeModeName.Length == 0)
-        {
-            throw new ArgumentException(
-                "Mode name does not contain a safe path component.",
-                nameof(modeName));
-        }
-
+        var safeModeName = SanitizeModeName(modeName);
         var runIdSuffix = runId.Length <= 8 ? runId : runId[..8];
         var timestamp = _timeProvider
             .GetUtcNow()
@@ -55,6 +43,55 @@ public sealed class ArtifactWriter : IArtifactWriter
             Path.Combine(runDirectory, "eval_report.md"));
 
         return Task.FromResult(artifacts);
+    }
+
+    public Task<RunArtifactPaths> PrepareStageAsync(
+        RunArtifactPaths root,
+        int stageIndex,
+        string modeName,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentException.ThrowIfNullOrWhiteSpace(modeName);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var safeModeName = SanitizeModeName(modeName);
+        var stageDirectory = Path.GetFullPath(
+            Path.Combine(
+                root.RunDirectory,
+                "stages",
+                $"{stageIndex:D2}-{safeModeName}"));
+
+        EnsureWithinRunDirectory(root.RunDirectory, stageDirectory);
+        Directory.CreateDirectory(stageDirectory);
+
+        var artifacts = new RunArtifactPaths(
+            stageDirectory,
+            Path.Combine(stageDirectory, "input.md"),
+            Path.Combine(stageDirectory, "result.md"),
+            Path.Combine(stageDirectory, "trace.json"),
+            Path.Combine(stageDirectory, "run_summary.md"),
+            Path.Combine(stageDirectory, "eval_report.md"));
+
+        return Task.FromResult(artifacts);
+    }
+
+    private static string SanitizeModeName(string modeName)
+    {
+        var safeModeName = new string(
+            modeName
+                .Where(character =>
+                    char.IsAsciiLetterOrDigit(character) || character == '-')
+                .ToArray());
+
+        if (safeModeName.Length == 0)
+        {
+            throw new ArgumentException(
+                "Mode name does not contain a safe path component.",
+                nameof(modeName));
+        }
+
+        return safeModeName;
     }
 
     public Task WriteAsync(

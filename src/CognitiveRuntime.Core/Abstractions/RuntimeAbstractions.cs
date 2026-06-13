@@ -51,6 +51,12 @@ public interface IArtifactWriter
         string runId,
         CancellationToken cancellationToken = default);
 
+    Task<RunArtifactPaths> PrepareStageAsync(
+        RunArtifactPaths root,
+        int stageIndex,
+        string modeName,
+        CancellationToken cancellationToken = default);
+
     Task WriteAsync(
         RunArtifactPaths artifacts,
         ArtifactKind kind,
