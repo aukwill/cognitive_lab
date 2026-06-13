@@ -56,7 +56,7 @@ multiple loop shapes, not just the bounded revision loop, and a reviewer
 should be able to run and compare patterns side by side. Each item is intended
 to be one reviewable pull request.
 
-- [ ] `OP-001` Define `IOrchestrationPattern`.
+- [x] `OP-001` Define `IOrchestrationPattern`.
 - [ ] `OP-002` Implement `SinglePassPattern`.
 - [ ] `OP-003` Implement `CriticRevisionPattern` on top of `IOrchestrationPattern`.
 - [ ] `OP-004` Implement `LinearPipelinePattern`.
