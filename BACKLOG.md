@@ -2572,6 +2572,10 @@ Relevant research:
 
 ### AR-012 - Verifier-guided generative optimization
 
+Research status: `complete` on 2026-06-14. Promote the bounded Flare dungeon
+builder experiment described in
+[`docs/research/AR-012-flare-dungeon-builder.md`](docs/research/AR-012-flare-dungeon-builder.md).
+
 Research a bounded loop where the model proposes a candidate artifact, an
 executable verifier returns structured feedback, and the runtime permits a
 fixed number of revisions under a declared objective.
