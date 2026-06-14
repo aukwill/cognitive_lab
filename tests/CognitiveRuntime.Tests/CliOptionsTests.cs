@@ -226,11 +226,11 @@ public sealed class CliOptionsTests
     }
 
     [Fact]
-    public void Parse_RejectsHtmlWithLinearPipelinePattern()
+    public void Parse_AcceptsHtmlWithLinearPipelinePattern()
     {
         var configuration = new ConfigurationBuilder().Build();
 
-        Assert.Throws<CliUsageException>(() => CliOptions.Parse(
+        var options = CliOptions.Parse(
             [
                 "--input",
                 "input.txt",
@@ -242,6 +242,10 @@ public sealed class CliOptionsTests
                 "frame,challenge",
                 "--html"
             ],
-            configuration));
+            configuration);
+
+        Assert.True(options.WriteHtmlView);
+        Assert.Equal("linear-pipeline", options.Pattern);
+        Assert.Equal(["frame", "challenge"], options.PipelineStages);
     }
 }

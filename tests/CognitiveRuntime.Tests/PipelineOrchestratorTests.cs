@@ -31,10 +31,13 @@ public sealed class PipelineOrchestratorTests
                 "Build a traceable local-first cognitive runtime.",
                 "mock",
                 workspace.OutputRoot,
+                WriteHtmlView: true,
                 Pattern: "linear-pipeline",
                 PipelineStages: ["frame", "challenge"]));
 
         Assert.Equal(RunOutcome.Success, result.Outcome);
+        Assert.NotNull(result.HtmlViewPath);
+        Assert.True(File.Exists(result.HtmlViewPath));
 
         var resultMarkdown = await File.ReadAllTextAsync(result.ResultPath);
         Assert.Contains("## Authoritative Revision", resultMarkdown);
@@ -53,6 +56,9 @@ public sealed class PipelineOrchestratorTests
             Path.Combine(result.OutputDirectory, "run_summary.md"));
         Assert.Contains("Pattern: `linear-pipeline`", runSummaryMarkdown);
         Assert.Contains("frame -> challenge", runSummaryMarkdown);
+        var evalMarkdown = await File.ReadAllTextAsync(result.EvalReportPath);
+        Assert.Contains("declared plan execution", evalMarkdown);
+        Assert.Contains("model call pairing", evalMarkdown);
 
         var patternMarkdown = await File.ReadAllTextAsync(
             Path.Combine(result.OutputDirectory, "pattern.md"));
@@ -60,6 +66,48 @@ public sealed class PipelineOrchestratorTests
         Assert.Contains("frame -> challenge", patternMarkdown);
         Assert.Contains("input: the run's initial input", patternMarkdown);
         Assert.Contains("input: stage 01 (`frame`)'s authoritative revision", patternMarkdown);
+
+        var html = await File.ReadAllTextAsync(result.HtmlViewPath);
+        Assert.Contains(">linear-pipeline<", html);
+        Assert.Contains("Stage 01", html);
+        Assert.Contains(">frame<", html);
+        Assert.Contains("Stage 02", html);
+        Assert.Contains(">challenge<", html);
+        Assert.Contains(
+            "<strong>frame</strong> &rarr; <strong>challenge</strong>: authoritative revision",
+            html);
+        Assert.Contains("href=\"stages/01-frame/input.md\"", html);
+        Assert.Contains("href=\"stages/02-challenge/result.md\"", html);
+        Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
+
+        using (var manifest = JsonDocument.Parse(
+                   await File.ReadAllTextAsync(
+                       Path.Combine(result.OutputDirectory, "run.json"))))
+        {
+            var root = manifest.RootElement;
+            Assert.Equal(
+                ["stage-01", "stage-02"],
+                root.GetProperty("stages")
+                    .EnumerateArray()
+                    .Select(stage =>
+                        stage.GetProperty("stageId").GetString() ?? string.Empty)
+                    .ToArray());
+            Assert.All(
+                root.GetProperty("stages").EnumerateArray(),
+                stage => Assert.Equal(
+                    "completed",
+                    stage.GetProperty("status").GetString()));
+            Assert.Contains(
+                root.GetProperty("artifacts").EnumerateArray(),
+                artifact =>
+                    artifact.GetProperty("relativePath").GetString() ==
+                    "stages/01-frame/input.md");
+            Assert.Contains(
+                root.GetProperty("artifacts").EnumerateArray(),
+                artifact =>
+                    artifact.GetProperty("relativePath").GetString() ==
+                    "stages/02-challenge/result.md");
+        }
 
         await using var traceStream = File.OpenRead(result.TracePath);
         using var traceDocument = await JsonDocument.ParseAsync(traceStream);
@@ -82,6 +130,11 @@ public sealed class PipelineOrchestratorTests
         Assert.Contains("eval.completed", eventTypes);
         Assert.Contains("run.finalized", eventTypes);
         Assert.Equal("run.finalized", eventTypes[^1]);
+        Assert.Contains(
+            traceEvents,
+            traceEvent =>
+                traceEvent.GetProperty("type").GetString() == "artifact.written" &&
+                traceEvent.GetProperty("data").GetProperty("name").GetString() == "index.html");
 
         var patternStartedEvent = traceEvents.Single(
             traceEvent => traceEvent.GetProperty("type").GetString() == "pattern.started");
@@ -91,6 +144,30 @@ public sealed class PipelineOrchestratorTests
             ["frame", "challenge"],
             patternStartedData.GetProperty("stages").EnumerateArray()
                 .Select(stage => stage.GetString() ?? string.Empty)
+                .ToArray());
+        var resolvedPlan = patternStartedData.GetProperty("plan");
+        Assert.Equal(
+            "stage-02.revision",
+            resolvedPlan.GetProperty("authoritativeNodeId").GetString());
+        Assert.Equal(
+            [
+                "stage-01.main",
+                "stage-01.critic",
+                "stage-01.revision",
+                "stage-02.main",
+                "stage-02.critic",
+                "stage-02.revision"
+            ],
+            resolvedPlan.GetProperty("nodes")
+                .EnumerateArray()
+                .Select(node => node.GetProperty("id").GetString() ?? string.Empty)
+                .ToArray());
+        Assert.Equal(
+            ["stage-02.main", "stage-02.critic", "stage-02.revision"],
+            resolvedPlan.GetProperty("evalProfile")
+                .GetProperty("requiredNodeIds")
+                .EnumerateArray()
+                .Select(node => node.GetString() ?? string.Empty)
                 .ToArray());
 
         var patternCompletedEvent = traceEvents.Single(
@@ -142,10 +219,27 @@ public sealed class PipelineOrchestratorTests
                 "Build a traceable local-first cognitive runtime.",
                 "mock",
                 workspace.OutputRoot,
+                WriteHtmlView: true,
                 Pattern: "single-pass"));
 
-        Assert.Equal(RunOutcome.EvalFailed, result.Outcome);
+        Assert.Equal(RunOutcome.Success, result.Outcome);
         AssertRequiredArtifactsExist(result.OutputDirectory);
+        Assert.NotNull(result.HtmlViewPath);
+
+        var resultMarkdown = await File.ReadAllTextAsync(result.ResultPath);
+        Assert.Contains("## Authoritative Result", resultMarkdown);
+        Assert.Contains("## Problem", resultMarkdown);
+        Assert.DoesNotContain("## Critic Review", resultMarkdown);
+
+        var evalMarkdown = await File.ReadAllTextAsync(result.EvalReportPath);
+        Assert.Contains("Overall: **PASS**", evalMarkdown);
+        Assert.Contains("main phase ran", evalMarkdown);
+        Assert.Contains("main is not empty", evalMarkdown);
+        Assert.DoesNotContain("critic phase ran", evalMarkdown);
+        Assert.DoesNotContain("revision phase ran", evalMarkdown);
+        Assert.DoesNotContain("loop responded to critic findings", evalMarkdown);
+        Assert.Contains("declared plan execution", evalMarkdown);
+        Assert.Contains("model call pairing", evalMarkdown);
 
         var runSummaryMarkdown = await File.ReadAllTextAsync(
             Path.Combine(result.OutputDirectory, "run_summary.md"));
@@ -155,6 +249,12 @@ public sealed class PipelineOrchestratorTests
             Path.Combine(result.OutputDirectory, "pattern.md"));
         Assert.Contains("`single-pass`", patternMarkdown);
         Assert.Contains("`main` (main) - context: no prior phase results", patternMarkdown);
+
+        var html = await File.ReadAllTextAsync(result.HtmlViewPath);
+        Assert.Contains(">single-pass<", html);
+        Assert.Contains(">main<", html);
+        Assert.Contains("1 step executed in runtime-defined order.", html);
+        Assert.Contains("This pattern has no relationships between steps.", html);
 
         var eventTypes = await ReadTraceEventTypesAsync(result.OutputDirectory);
         Assert.DoesNotContain("critic.started", eventTypes);
@@ -172,6 +272,11 @@ public sealed class PipelineOrchestratorTests
             traceEvent => traceEvent.GetProperty("type").GetString() == "pattern.started");
         var patternStartedData = patternStartedEvent.GetProperty("data");
         Assert.Equal("single-pass", patternStartedData.GetProperty("pattern").GetString());
+        Assert.Equal(
+            "main",
+            patternStartedData.GetProperty("plan")
+                .GetProperty("authoritativeNodeId")
+                .GetString());
 
         var stepDescriptors = patternStartedData.GetProperty("steps").EnumerateArray().ToArray();
         Assert.Single(stepDescriptors);

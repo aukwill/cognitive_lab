@@ -1,5 +1,4 @@
 using CognitiveRuntime.Core.Contracts;
-using CognitiveRuntime.Core.Modes;
 using CognitiveRuntime.Core.Runtime.Orchestration;
 
 namespace CognitiveRuntime.Tests;
@@ -15,48 +14,35 @@ public sealed class OrchestrationPatternTests
     }
 
     [Fact]
-    public async Task Plan_ReturnsPhasesInManifestOrder()
+    public void CreatePlan_ReturnsTypedNodesInRuntimeOrder()
     {
-        using var workspace = new TestWorkspace();
-        workspace.CreateMode();
-        var mode = await new FileModeLoader(workspace.ModesRoot).LoadAsync("frame");
-
-        var steps = new CriticRevisionPattern().Plan(mode);
-
-        Assert.Equal(mode.Phases.Count, steps.Count);
-        for (var index = 0; index < mode.Phases.Count; index++)
-        {
-            Assert.Equal(mode.Phases[index].Name, steps[index].Name);
-            Assert.Equal(mode.Phases[index].Kind, steps[index].Kind);
-        }
+        var plan = new CriticRevisionPattern().CreatePlan(
+            new PatternPlanRequest("frame", null, null));
 
         Assert.Equal(
             [PhaseKind.Main, PhaseKind.Critic, PhaseKind.Revision],
-            steps.Select(step => step.Kind));
+            plan.Nodes.Select(node => node.PhaseKind));
+        Assert.Equal(["main", "critic", "revision"], plan.Nodes.Select(node => node.Id));
+        Assert.Empty(plan.Nodes[0].ContextNodeIds);
+        Assert.Equal(["main"], plan.Nodes[1].ContextNodeIds);
+        Assert.Equal(["main", "critic"], plan.Nodes[2].ContextNodeIds);
+        Assert.Equal("revision", plan.AuthoritativeNodeId);
+        Assert.Equal(
+            ["main", "critic", "revision"],
+            plan.EvalProfile.RequiredNodeIds);
+        Assert.True(plan.EvalProfile.EvaluateLoopEfficacy);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(2)]
-    public async Task SelectContext_ReturnsCompletedResultsUnchanged(int completedCount)
+    [Fact]
+    public void CreatePlan_IsDataOnlyAndCarriesModeSource()
     {
-        using var workspace = new TestWorkspace();
-        workspace.CreateMode();
-        var mode = await new FileModeLoader(workspace.ModesRoot).LoadAsync("frame");
-        var pattern = new CriticRevisionPattern();
-        var steps = pattern.Plan(mode);
+        var plan = new CriticRevisionPattern().CreatePlan(
+            new PatternPlanRequest("lens", "warcraft", null));
 
-        var completedResults = Enumerable.Range(0, completedCount)
-            .Select(index => new PhaseResult(
-                $"phase-{index}",
-                PhaseKind.Main,
-                $"content-{index}",
-                "mock",
-                null))
-            .ToArray();
-
-        var context = pattern.SelectContext(steps[0], completedResults);
-
-        Assert.Equal(completedResults, context);
+        var source = Assert.Single(plan.ModeSources);
+        Assert.Equal("primary", source.Id);
+        Assert.Equal("lens", source.ModeName);
+        Assert.Equal("warcraft", source.Lens);
+        Assert.All(plan.Nodes, node => Assert.Equal(source.Id, node.ModeSourceId));
     }
 }

@@ -77,7 +77,24 @@ modes/
 
 examples/
 outputs/
+docs/
+  architecture/
+  research/
+scripts/
+projects/
 ```
+
+`docs/architecture/` holds architecture decision records (ADRs);
+`docs/research/` holds design notes for active research items.
+
+`scripts/` holds small local developer scripts (for example, loading
+`.env.local`).
+
+`projects/` holds separate, runnable applications that consume this runtime
+(for example `projects/document-distiller`). Each has its own solution,
+tests, and `AGENTS.md` that governs that subtree. Do not move runtime
+orchestration, state, policy, trace, or eval logic into a `projects/`
+application.
 
 ## Project Boundaries
 
@@ -141,6 +158,7 @@ Required clients:
 * `MockModelClient`
 * `GitHubModelsClient`
 * `AzureFoundryModelClient`
+* `OpenRouterModelClient`
 
 Provider-specific logic must stay inside provider-specific clients.
 
@@ -223,17 +241,37 @@ Trace events should include:
 
 ```text
 run.started
+pattern.started
 mode.loaded
+node.started
+stage.started
 phase.started
 model.called
 model.completed
+model.failed
 critic.started
 critic.completed
+revision.started
+revision.completed
+phase.completed
+node.completed
+node.failed
+node.cancelled
+stage.completed
+pattern.completed
+artifact.reserved
 artifact.written
 eval.started
 eval.completed
 run.completed
+run.finalized
+run.cancelled
+run.failed
 ```
+
+The canonical, authoritative list of event names is `TraceEventNames` in
+`src/CognitiveRuntime.Core/Contracts/TraceEventNames.cs`. Keep this list in
+sync with that file.
 
 Trace files must be valid JSON.
 
@@ -251,7 +289,14 @@ result.md
 trace.json
 run_summary.md
 eval_report.md
+pattern.md
+run.json
 ```
+
+`pattern.md` describes the resolved pattern steps or stages and their context
+flow. `run.json` is the terminal machine-readable run manifest. Runs may also
+write `index.html` as an optional human-readable view. Optional artifacts must
+not replace the required ones.
 
 Do not write outside the output folder except for normal test/build artifacts.
 

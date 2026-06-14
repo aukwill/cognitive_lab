@@ -57,10 +57,10 @@ public sealed class EvalRunnerTests
             []);
         var events = new[]
         {
-            CreateEvent("run.started"),
-            CreateEvent("critic.completed"),
-            CreateEvent("revision.completed"),
-            CreateEvent("run.completed")
+            CreateEvent(TraceEventNames.RunStarted),
+            CreateEvent(TraceEventNames.CriticCompleted),
+            CreateEvent(TraceEventNames.RevisionCompleted),
+            CreateEvent(TraceEventNames.RunCompleted)
         };
         var phaseResults = new[]
         {
@@ -73,7 +73,12 @@ public sealed class EvalRunnerTests
         var runner = new EvalRunner(new OutputContractValidator());
 
         var report = await runner.EvaluateAsync(
-            new EvalContext(artifacts, mode, events, phaseResults));
+            new EvalContext(
+                artifacts,
+                mode,
+                events,
+                phaseResults,
+                CreateCriticRevisionPlan()));
 
         Assert.False(report.Passed);
         var contractCheck = Assert.Single(
@@ -116,10 +121,10 @@ public sealed class EvalRunnerTests
             []);
         var events = new[]
         {
-            CreateEvent("run.started"),
-            CreateEvent("critic.completed"),
-            CreateEvent("revision.completed"),
-            CreateEvent("run.completed")
+            CreateEvent(TraceEventNames.RunStarted),
+            CreateEvent(TraceEventNames.CriticCompleted),
+            CreateEvent(TraceEventNames.RevisionCompleted),
+            CreateEvent(TraceEventNames.RunCompleted)
         };
         var phaseResults = new[]
         {
@@ -130,13 +135,92 @@ public sealed class EvalRunnerTests
         var runner = new EvalRunner(new OutputContractValidator());
 
         var report = await runner.EvaluateAsync(
-            new EvalContext(artifacts, mode, events, phaseResults));
+            new EvalContext(
+                artifacts,
+                mode,
+                events,
+                phaseResults,
+                CreateCriticRevisionPlan()));
 
         Assert.False(report.Passed);
         var revisionCheck = Assert.Single(
             report.Checks,
             check => check.Name == "revision is not empty");
         Assert.False(revisionCheck.Passed);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_SinglePassValidatesMainAsAuthoritativeOutput()
+    {
+        using var workspace = new TestWorkspace();
+        var writer = new ArtifactWriter(TimeProvider.System);
+        var artifacts = await writer.PrepareRunAsync(
+            workspace.OutputRoot,
+            "frame",
+            "12345678");
+
+        foreach (var kind in Enum.GetValues<ArtifactKind>())
+        {
+            await writer.WriteAsync(artifacts, kind, "content");
+        }
+
+        await File.WriteAllTextAsync(artifacts.TracePath, "{}");
+        const string mainContent = """
+            ## Problem
+
+            Bound the runtime problem.
+
+            ## Objective
+
+            Produce an inspectable result.
+            """;
+        var mode = new LoadedMode(
+            workspace.Root,
+            "# Test",
+            new ModeManifest
+            {
+                Name = "frame",
+                Description = "Test.",
+                OutputContract = new OutputContract
+                {
+                    RequiredHeadings = ["## Problem", "## Objective"],
+                    MinimumLength = 20
+                }
+            },
+            []);
+        var events = new[]
+        {
+            CreateEvent(TraceEventNames.RunStarted),
+            CreateEvent(TraceEventNames.ModelCompleted, "main"),
+            CreateEvent(TraceEventNames.RunCompleted)
+        };
+        var phaseResults = new[]
+        {
+            CreatePhaseResult(PhaseKind.Main, mainContent)
+        };
+        var runner = new EvalRunner(new OutputContractValidator());
+
+        var report = await runner.EvaluateAsync(
+            new EvalContext(
+                artifacts,
+                mode,
+                events,
+                phaseResults,
+                new EvalPlan(
+                    [PhaseKind.Main],
+                    PhaseKind.Main,
+                    EvaluateLoopEfficacy: false)));
+
+        Assert.True(report.Passed);
+        Assert.Contains(
+            report.Checks,
+            check => check.Name == "main phase ran" && check.Passed);
+        Assert.Contains(
+            report.Checks,
+            check => check.Name == "main is not empty" && check.Passed);
+        Assert.DoesNotContain(
+            report.Checks,
+            check => check.Name == "loop responded to critic findings");
     }
 
     private static PhaseResult CreatePhaseResult(
@@ -149,10 +233,19 @@ public sealed class EvalRunnerTests
             "test",
             "test-model");
 
-    private static TraceEvent CreateEvent(string type) =>
+    private static TraceEvent CreateEvent(string type, string? phase = null) =>
         new(
+            1,
             DateTimeOffset.UtcNow,
             type,
             "run",
-            new Dictionary<string, object?>());
+            phase is null
+                ? new Dictionary<string, object?>()
+                : new Dictionary<string, object?> { ["phase"] = phase });
+
+    private static EvalPlan CreateCriticRevisionPlan() =>
+        new(
+            [PhaseKind.Main, PhaseKind.Critic, PhaseKind.Revision],
+            PhaseKind.Revision,
+            EvaluateLoopEfficacy: true);
 }

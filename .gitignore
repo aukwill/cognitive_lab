@@ -7,3 +7,6 @@ outputs/*
 TestResults/
 *.user
 *.suo
+.env
+.env.local
+.claude/settings.local.json

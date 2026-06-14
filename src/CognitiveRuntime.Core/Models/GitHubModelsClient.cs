@@ -45,7 +45,7 @@ public sealed class GitHubModelsClient : IModelClient
             messages = new[]
             {
                 new { role = "system", content = request.Prompt },
-                new { role = "user", content = BuildUserMessage(request) }
+                new { role = "user", content = ModelRequestFormatting.BuildUserMessage(request) }
             },
             temperature = 0.2
         });
@@ -163,49 +163,6 @@ public sealed class GitHubModelsClient : IModelClient
         return new Uri(endpoint, UriKind.Absolute);
     }
 
-    private static string BuildUserMessage(ModelRequest request)
-    {
-        var builder = new System.Text.StringBuilder()
-            .Append("Mode: ")
-            .AppendLine(request.ModeName)
-            .Append("Phase: ")
-            .AppendLine(request.PhaseName)
-            .AppendLine()
-            .AppendLine("Original input:")
-            .AppendLine(request.Input)
-            .AppendLine()
-            .AppendLine("Prior phase results:");
-
-        if (request.PriorPhaseResults.Count == 0)
-        {
-            return builder.AppendLine("None").ToString();
-        }
-
-        foreach (var result in request.PriorPhaseResults)
-        {
-            builder
-                .AppendLine()
-                .Append("Phase: ")
-                .Append(result.PhaseName)
-                .Append(" (")
-                .Append(result.PhaseKind.ToString().ToLowerInvariant())
-                .AppendLine(")")
-                .AppendLine("Output:")
-                .AppendLine(result.Content);
-        }
-
-        return builder.ToString();
-    }
-
-    private static string Abbreviate(string value)
-    {
-        const int limit = 800;
-        var normalized = value.ReplaceLineEndings(" ").Trim();
-        return normalized.Length <= limit
-            ? normalized
-            : string.Concat(normalized.AsSpan(0, limit), "...");
-    }
-
     private static string CreateFailureMessage(
         HttpResponseMessage response,
         string responseBody)
@@ -222,6 +179,7 @@ public sealed class GitHubModelsClient : IModelClient
         };
 
         return $"GitHub Models returned {(int)response.StatusCode} " +
-            $"({response.ReasonPhrase}).{guidance} Response: {Abbreviate(responseBody)}";
+            $"({response.ReasonPhrase}).{guidance} Response: " +
+            $"{ModelRequestFormatting.Abbreviate(responseBody)}";
     }
 }

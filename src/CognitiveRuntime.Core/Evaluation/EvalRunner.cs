@@ -8,13 +8,21 @@ public sealed class EvalRunner : IEvalRunner
 {
     private readonly OutputContractValidator _outputContractValidator;
     private readonly LoopEfficacyEvaluator _loopEfficacyEvaluator;
+    private readonly DeclaredPlanExecutionEvaluator _planExecutionEvaluator;
+    private readonly ModelCallPairingEvaluator _modelCallPairingEvaluator;
 
     public EvalRunner(
         OutputContractValidator outputContractValidator,
-        LoopEfficacyEvaluator? loopEfficacyEvaluator = null)
+        LoopEfficacyEvaluator? loopEfficacyEvaluator = null,
+        DeclaredPlanExecutionEvaluator? planExecutionEvaluator = null,
+        ModelCallPairingEvaluator? modelCallPairingEvaluator = null)
     {
         _outputContractValidator = outputContractValidator;
         _loopEfficacyEvaluator = loopEfficacyEvaluator ?? new LoopEfficacyEvaluator();
+        _planExecutionEvaluator =
+            planExecutionEvaluator ?? new DeclaredPlanExecutionEvaluator();
+        _modelCallPairingEvaluator =
+            modelCallPairingEvaluator ?? new ModelCallPairingEvaluator();
     }
 
     public async Task<EvalReport> EvaluateAsync(
@@ -26,45 +34,69 @@ public sealed class EvalRunner : IEvalRunner
                 context.Artifacts.ResultPath,
                 cancellationToken)
             : string.Empty;
-        var main = context.PhaseResults.SingleOrDefault(
+        var main = context.PhaseResults.FirstOrDefault(
             phaseResult => phaseResult.PhaseKind == PhaseKind.Main);
-        var critic = context.PhaseResults.SingleOrDefault(
+        var critic = context.PhaseResults.FirstOrDefault(
             phaseResult => phaseResult.PhaseKind == PhaseKind.Critic);
-        var revision = context.PhaseResults.SingleOrDefault(
+        var revision = context.PhaseResults.FirstOrDefault(
             phaseResult => phaseResult.PhaseKind == PhaseKind.Revision);
+        var authoritative = context.PhaseResults.FirstOrDefault(
+            phaseResult =>
+                phaseResult.PhaseKind == context.Plan.AuthoritativePhaseKind);
         var mainContent = main?.Content ?? string.Empty;
         var criticContent = critic?.Content ?? string.Empty;
         var revisionContent = revision?.Content ?? string.Empty;
+        var authoritativeContent = authoritative?.Content ?? string.Empty;
 
         var events = context.TraceEvents;
         var checks = new List<EvalCheckResult>
         {
             CheckRequiredArtifacts(context.Artifacts),
-            CheckTraceEvent(events, "run.started"),
-            CheckTraceEvent(events, "run.completed"),
-            CheckTraceEvent(events, "critic.completed", "critic phase ran"),
-            CheckTraceEvent(events, "revision.completed", "revision phase ran"),
+            CheckTraceEvent(events, TraceEventNames.RunStarted),
+            CheckTraceEvent(events, TraceEventNames.RunCompleted),
             new(
                 "result is not empty",
                 !string.IsNullOrWhiteSpace(result),
                 string.IsNullOrWhiteSpace(result)
                     ? "result.md is empty."
-                    : "result.md contains content."),
-            new(
-                "revision is not empty",
-                !string.IsNullOrWhiteSpace(revisionContent),
-                string.IsNullOrWhiteSpace(revisionContent)
-                    ? "The authoritative revision is empty."
-                    : "The authoritative revision contains content."),
-            _outputContractValidator.Validate(
-                revisionContent,
-                context.Mode.Manifest.OutputContract),
-            _loopEfficacyEvaluator.Evaluate(
-                mainContent,
-                criticContent,
-                revisionContent,
-                context.Mode.Manifest.OutputContract)
+                    : "result.md contains content.")
         };
+
+        checks.AddRange(
+            context.Plan.RequiredPhaseKinds.Select(
+                phaseKind => CheckPhaseCompleted(
+                    context.PhaseResults,
+                    events,
+                    phaseKind)));
+        checks.Add(
+            CheckAuthoritativeOutput(
+                context.Plan.AuthoritativePhaseKind,
+                authoritativeContent));
+        checks.Add(
+            _outputContractValidator.Validate(
+                authoritativeContent,
+                context.Mode.Manifest.OutputContract));
+
+        if (context.Plan.Execution is not null)
+        {
+            checks.Add(
+                _planExecutionEvaluator.Evaluate(
+                    context.Plan.Execution,
+                    events,
+                    context.NodeResultsById,
+                    context.AuthoritativeContent));
+            checks.Add(_modelCallPairingEvaluator.Evaluate(events));
+        }
+
+        if (context.Plan.EvaluateLoopEfficacy)
+        {
+            checks.Add(
+                _loopEfficacyEvaluator.Evaluate(
+                    mainContent,
+                    criticContent,
+                    revisionContent,
+                    context.Mode.Manifest.OutputContract));
+        }
 
         return new EvalReport(checks);
     }
@@ -125,4 +157,70 @@ public sealed class EvalRunner : IEvalRunner
                 ? $"Trace contains '{eventType}'."
                 : $"Trace does not contain '{eventType}'.");
     }
+
+    private static EvalCheckResult CheckPhaseCompleted(
+        IReadOnlyList<PhaseResult> phaseResults,
+        IReadOnlyList<TraceEvent> events,
+        PhaseKind phaseKind)
+    {
+        var matches = phaseResults
+            .Where(result => result.PhaseKind == phaseKind)
+            .ToArray();
+        var phaseName = matches.FirstOrDefault()?.PhaseName;
+        var completionEventType = phaseKind switch
+        {
+            PhaseKind.Main => TraceEventNames.ModelCompleted,
+            PhaseKind.Critic => TraceEventNames.CriticCompleted,
+            PhaseKind.Revision => TraceEventNames.RevisionCompleted,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(phaseKind),
+                phaseKind,
+                "Unsupported phase kind.")
+        };
+        var completionEventFound = phaseName is not null &&
+            events.Any(traceEvent =>
+                string.Equals(
+                    traceEvent.Type,
+                    completionEventType,
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    GetDataString(traceEvent, "phase"),
+                    phaseName,
+                    StringComparison.OrdinalIgnoreCase));
+        var passed = matches.Length == 1 && completionEventFound;
+        var kindName = phaseKind.ToString().ToLowerInvariant();
+        var details = matches.Length switch
+        {
+            0 => $"No {kindName} phase result was recorded.",
+            > 1 => $"Expected one {kindName} phase result, but found {matches.Length}.",
+            _ when !completionEventFound =>
+                $"Trace does not contain '{completionEventType}' for phase '{phaseName}'.",
+            _ => $"The {kindName} phase completed exactly once."
+        };
+
+        return new EvalCheckResult(
+            $"{kindName} phase ran",
+            passed,
+            details);
+    }
+
+    private static EvalCheckResult CheckAuthoritativeOutput(
+        PhaseKind authoritativePhaseKind,
+        string content)
+    {
+        var kindName = authoritativePhaseKind.ToString().ToLowerInvariant();
+        var passed = !string.IsNullOrWhiteSpace(content);
+
+        return new EvalCheckResult(
+            $"{kindName} is not empty",
+            passed,
+            passed
+                ? $"The authoritative {kindName} contains content."
+                : $"The authoritative {kindName} is empty.");
+    }
+
+    private static string? GetDataString(TraceEvent traceEvent, string key) =>
+        traceEvent.Data.TryGetValue(key, out var value)
+            ? value?.ToString()
+            : null;
 }

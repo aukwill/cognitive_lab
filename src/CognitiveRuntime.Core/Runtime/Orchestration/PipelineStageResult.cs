@@ -3,8 +3,8 @@ using CognitiveRuntime.Core.Contracts;
 namespace CognitiveRuntime.Core.Runtime.Orchestration;
 
 /// <summary>
-/// The outcome of running a single stage of a <see cref="LinearPipelinePattern"/>:
-/// a complete main-&gt;critic-&gt;revision run of one mode.
+/// The outcome of a single grouped stage executed by
+/// <see cref="PatternExecutor"/>.
 /// </summary>
 public sealed record PipelineStageResult(
     int StageIndex,

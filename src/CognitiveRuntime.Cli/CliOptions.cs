@@ -89,12 +89,6 @@ internal sealed record CliOptions(
                 "'--pipeline' requires '--pattern linear-pipeline'.");
         }
 
-        if (isLinearPipeline && values.ContainsKey("--html"))
-        {
-            throw new CliUsageException(
-                "'--html' is not yet supported with '--pattern linear-pipeline'.");
-        }
-
         var mode = isLinearPipeline
             ? values.GetValueOrDefault("--mode") ?? "pipeline"
             : Require(values, "--mode");

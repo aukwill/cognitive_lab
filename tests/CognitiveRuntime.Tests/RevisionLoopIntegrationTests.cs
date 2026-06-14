@@ -197,6 +197,17 @@ public sealed class RevisionLoopIntegrationTests
         Assert.Contains("revision.completed", eventTypes);
         Assert.DoesNotContain("run.failed", eventTypes);
         Assert.Equal("run.finalized", eventTypes[^1]);
+        using var manifest = System.Text.Json.JsonDocument.Parse(
+            await File.ReadAllTextAsync(
+                Path.Combine(result.OutputDirectory, "run.json")));
+        Assert.Equal(
+            "evalFailed",
+            manifest.RootElement.GetProperty("outcome").GetString());
+        Assert.False(
+            manifest.RootElement
+                .GetProperty("evaluation")
+                .GetProperty("passed")
+                .GetBoolean());
     }
 
     private sealed class CapturingModelClient : IModelClient

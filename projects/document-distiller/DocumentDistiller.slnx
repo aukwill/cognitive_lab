@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DocumentDistiller.Cli/DocumentDistiller.Cli.csproj" />
+    <Project Path="src/DocumentDistiller.Core/DocumentDistiller.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DocumentDistiller.Tests/DocumentDistiller.Tests.csproj" />
+  </Folder>
+</Solution>

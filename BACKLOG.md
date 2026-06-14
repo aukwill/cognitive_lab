@@ -9,12 +9,16 @@ comparing, and inspecting bounded agent orchestration patterns, where the
 runtime owns the loop and the model only performs reasoning inside assigned
 steps.
 
-The core object is the `OrchestrationPattern`: single-pass, critic-revision,
-linear-pipeline, router, supervisor-workers, and similar shapes. Each pattern
-is runtime-owned, bounded, inspectable, and mockable. `Mode` describes what a
+The core object is the `OrchestrationPattern`. The implemented catalog is
+single-pass, critic-revision, and linear-pipeline. Each pattern is
+runtime-owned, bounded, inspectable, and mockable. `Mode` describes what a
 phase reasons about; `OrchestrationPattern` describes how phases relate and
 who runs next. The bounded revision loop already built is the
 `CriticRevisionPattern`, not the whole project.
+
+New pattern shapes should begin as research items. Do not expand the catalog
+until all existing patterns share one typed plan, one runtime executor, and
+one verification path.
 
 Items are ordered to strengthen runtime-owned orchestration, state, policy,
 traces, evals, and artifacts before expanding integrations. Trace, artifact,
@@ -35,13 +39,13 @@ are not ends in themselves.
 
 ## Suggested Sequence
 
-1. Stabilize the current baseline.
-2. Add the bounded revision loop.
-3. Make run state and lifecycle explicit.
+1. Complete the baseline, bounded revision loop, and initial pattern catalog.
+2. Unify all patterns behind one typed execution plan and runtime executor.
+3. Make run state, node state, and lifecycle explicit.
 4. Harden traces and artifacts.
-5. Deepen deterministic evaluation.
+5. Verify declared plans and context flow deterministically.
 6. Improve mode authoring and validation.
-7. Add an offline regression harness.
+7. Add an offline regression and pattern-comparison harness.
 8. Harden provider and tool boundaries.
 9. Improve CLI inspection and verification.
 
@@ -49,12 +53,32 @@ are not ends in themselves.
 
 This is the proposed order for the next implementation cycle. All other items
 remain open, but should not interrupt this queue without an explicit priority
-change.
+change. Each item is intended to be one reviewable pull request.
 
-The cycle re-centers the project on orchestration: the runtime should expose
-multiple loop shapes, not just the bounded revision loop, and a reviewer
-should be able to run and compare patterns side by side. Each item is intended
-to be one reviewable pull request.
+The initial pattern catalog exposed an important boundary problem:
+`linear-pipeline` has a separate orchestration path and directly coordinates
+runtime services. The next cycle removes that exception before adding another
+pattern shape.
+
+- [x] `OP-011` Define a typed pattern execution plan.
+- [x] `OP-012` Route every pattern through one runtime executor.
+- [x] `OP-013` Validate pattern plans before model execution.
+- [x] `CF-001` Define the canonical agent information model.
+- [x] `RS-001` Introduce immutable run state.
+- [x] `RS-003` Add stable execution-node state.
+- [x] `RS-002` Add a lifecycle state machine.
+- [x] `RS-004` Inject run ID generation.
+- [x] `TA-002` Centralize trace event names.
+- [x] `TA-001` Version the trace schema and add sequence numbers.
+- [x] `TA-003` Record durations.
+- [x] `TA-004` Add model call correlation IDs.
+- [x] `TA-005` Add sanitized failure events.
+- [x] `TA-006` Add `run.json`.
+- [x] `EV-003` Evaluate declared plan execution and cardinality.
+- [x] `EV-004` Evaluate model call pairing.
+- [x] `EV-005` Evaluate terminal trace integrity.
+
+### Completed - Orchestration Pattern Cycle
 
 - [x] `OP-001` Define `IOrchestrationPattern`.
 - [x] `OP-002` Implement `SinglePassPattern`.
@@ -63,9 +87,9 @@ to be one reviewable pull request.
 - [x] `OP-005` Add pattern selection to the CLI.
 - [x] `OP-006` Trace pattern lifecycle.
 - [x] `OP-007` Write a `pattern.md` artifact.
-- [ ] `OP-008` Show the pattern graph in static HTML.
-- [ ] `OP-009` Add mock outputs for each pattern.
-- [ ] `OP-010` Add tests proving the runtime, not the model, controls the
+- [x] `OP-008` Show the pattern graph in static HTML.
+- [x] `OP-009` Add mock outputs for each pattern.
+- [x] `OP-010` Add tests proving the runtime, not the model, controls the
       pattern.
 
 ### Completed - Loop Efficacy Cycle
@@ -76,13 +100,14 @@ to be one reviewable pull request.
 
 ### Deferred From The Previous Cycle
 
-These remain valuable but should not block the orchestration-pattern queue:
+These were deferred from the loop-efficacy cycle. The state and verification
+items now appear in the next implementation queue:
 
-- [ ] `RS-001` Introduce immutable run state.
+- [x] `RS-001` Introduce immutable run state.
 - [x] `RS-007` Define a typed run outcome.
-- [ ] `TA-002` Centralize trace event names.
-- [ ] `EV-003` Evaluate phase order and cardinality.
-- [ ] `EV-005` Evaluate terminal trace integrity.
+- [x] `TA-002` Centralize trace event names.
+- [x] `EV-003` Evaluate declared plan execution and cardinality.
+- [x] `EV-005` Evaluate terminal trace integrity.
 
 ### Completed - Milestones 0 and 1
 
@@ -100,6 +125,122 @@ These remain valuable but should not block the orchestration-pattern queue:
 - [x] `RL-010` Update the end-to-end documentation.
 - [x] `RL-008` Show revision in the static run view.
 - [x] `BL-004` Document lifecycle vocabulary.
+
+## Cross-Cutting Foundations
+
+These items prevent the implementation and research tracks from inventing
+incompatible representations or producing runs that cannot be reproduced,
+shared, or evaluated responsibly.
+
+### CF-001 - Define the canonical agent information model
+
+Priority: `P0`
+
+Status: Complete. See
+[`docs/architecture/ADR-001-canonical-agent-information-model.md`](docs/architecture/ADR-001-canonical-agent-information-model.md).
+
+Define the relationships among:
+
+- observation: immutable data received from an environment, tool, file, or
+  provider
+- evidence: an observation admitted for a declared reasoning purpose
+- claim: a proposition produced by a model or deterministic transformation
+- belief: runtime-managed epistemic state about one or more claims
+- blackboard entry: run-scoped shared structured state
+- context projection: the exact values disclosed to one execution node
+
+Acceptance:
+
+- Each concept has a typed identity, provenance, lifecycle, and ownership
+  boundary.
+- The model may propose claims and content but cannot relabel observations as
+  trusted evidence or commit beliefs and blackboard state directly.
+- `RB-007`, `RB-009`, `AR-004`, `AR-010`, and `AR-013` use this vocabulary
+  rather than defining parallel stores.
+- A short architecture decision record explains which concepts are persisted
+  in traces, artifacts, and run state.
+- The first version remains run-scoped and does not introduce long-term
+  memory.
+
+Relevant research:
+
+- [From Agent Traces to Trust: Evidence Tracing and Execution Provenance in
+  LLM Agents](https://arxiv.org/abs/2606.04990)
+- [Agent-BRACE: Decoupling Beliefs from Actions in Long-Horizon Tasks via
+  Verbalized State Uncertainty](https://arxiv.org/abs/2605.11436)
+
+### CF-002 - Add a run reproducibility envelope
+
+Priority: `P1`
+
+Acceptance:
+
+- `run.json` records runtime assembly version, source commit when available,
+  dirty-worktree status when available, .NET version, operating system,
+  effective non-secret configuration, mode and prompt hashes, provider API
+  version, exact model identifier, and deterministic seeds where applicable.
+- Missing provenance is represented as unknown, not omitted or guessed.
+- Secrets, tokens, machine usernames, and unrelated environment variables are
+  excluded.
+- Replay and comparison reports identify which envelope fields differ.
+- Tests inject deterministic provenance rather than depending on the local
+  Git repository or machine.
+
+### CF-003 - Define the agent threat and data-governance model
+
+Priority: `P1`
+
+Produce a versioned design note covering assets, actors, trust boundaries,
+attack surfaces, data classes, retention, redaction, deletion, artifact
+sharing, and expected incident evidence.
+
+Acceptance:
+
+- The model distinguishes user input, mode instructions, provider responses,
+  tool observations, external content, runtime policy, and human approval.
+- Data classes define what may appear in model requests, traces, artifacts,
+  eval fixtures, and exported bundles.
+- The design includes indirect prompt injection, confused-deputy behavior,
+  secret exfiltration, unsafe tool arguments, trace poisoning, and artifact
+  tampering.
+- `AR-001`, tool policy, context projection, and export behavior reference the
+  same trust and data classifications.
+- The document names residual risks that the runtime does not claim to solve.
+
+Relevant research:
+
+- [AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and
+  Defenses for LLM Agents](https://arxiv.org/abs/2406.13352)
+- [Agent-SafetyBench: Evaluating the Safety of LLM
+  Agents](https://arxiv.org/abs/2412.14470)
+
+### CF-004 - Define an evaluation validity protocol
+
+Priority: `P1`
+
+Research and document how an eval demonstrates that it measures the intended
+runtime behavior rather than an exploitable proxy.
+
+Acceptance:
+
+- Every eval declares its construct, observable proxy, known blind spots,
+  negative controls, mutation fixtures, and expected failure modes.
+- Benchmark inputs, provider fixtures, and acceptance thresholds are versioned
+  separately from implementation code.
+- The protocol addresses leakage, evaluator dependence, metric gaming,
+  Goodhart effects, repeated tuning on the same corpus, and nondeterministic
+  provider variance.
+- New research claims include a baseline, an ablation or negative control, and
+  reproducible commands.
+- An eval cannot become a release gate until its false-positive and
+  false-negative behavior is demonstrated on planted fixtures.
+
+Relevant research:
+
+- [ToolSandbox: A Stateful, Conversational, Interactive Evaluation Benchmark
+  for LLM Tool Use Capabilities](https://arxiv.org/abs/2408.04682)
+- [Benchmark Test-Time Scaling of General LLM
+  Agents](https://arxiv.org/abs/2602.18998)
 
 ## Milestone 0: Stabilize The Baseline
 
@@ -306,8 +447,10 @@ Acceptance:
 ## Milestone 1.1: Orchestration Patterns
 
 Outcome: the runtime exposes multiple bounded orchestration patterns through a
-single abstraction, and the CLI can select and compare them. This is the
-current center of gravity for the project.
+named catalog, and the CLI can select and inspect them.
+
+Status: Complete. `Milestone 1.2` closes the remaining split between simple
+patterns and composite pipeline execution.
 
 ```text
 dotnet run --project src/CognitiveRuntime.Cli -- \
@@ -445,6 +588,68 @@ Acceptance:
 - Tests cover at least `SinglePassPattern`, `CriticRevisionPattern`, and
   `LinearPipelinePattern`.
 
+## Milestone 1.2: Unified Pattern Execution
+
+Outcome: every pattern is an immutable runtime plan executed through the same
+orchestration path. Pattern implementations describe work; they do not load
+modes, invoke models, write artifacts, emit traces, or evaluate results.
+
+Status: Complete.
+
+This milestone is intentionally narrower than a generic graph engine. It only
+needs the fixed sequences and nested stages already used by the built-in
+patterns.
+
+### OP-011 - Define a typed pattern execution plan
+
+Priority: `P0`
+
+Acceptance:
+
+- A plan declares stable node IDs, node kind, mode source, dependencies,
+  context inputs, stage grouping, and the authoritative output.
+- A plan declares the deterministic eval profile required by the pattern
+  instead of inferring it from the final phase or pattern name.
+- The complete bounded plan is known before the first model call.
+- The plan contains data only and exposes no runtime services.
+- `single-pass`, `critic-revision`, and `linear-pipeline` are representable
+  without pattern-name conditionals.
+- Plan serialization is deterministic enough for traces, `pattern.md`, and
+  tests to consume the same structure.
+
+### OP-012 - Route every pattern through one runtime executor
+
+Priority: `P0`
+
+Acceptance:
+
+- The orchestrator resolves every pattern through one registry or factory;
+  it has no `linear-pipeline` string branch.
+- One runtime-owned executor handles mode loading, phase execution, context
+  assembly, tracing, artifact writing, and stage boundaries.
+- Pattern implementations do not depend on `IModelClient`, `PhaseRunner`,
+  `IArtifactWriter`, `ITraceSession`, or provider-specific types.
+- Existing CLI behavior, stage artifact layout, traces, and mock outputs
+  remain compatible.
+- Tests prove that all registered patterns use the shared executor.
+
+### OP-013 - Validate pattern plans before model execution
+
+Priority: `P0`
+
+Acceptance:
+
+- Node IDs are unique and dependencies reference declared nodes.
+- Context edges cannot reference future or undeclared nodes.
+- At execution time, context assembly rejects failed or incomplete source
+  nodes.
+- The plan has exactly one authoritative output and at least one executable
+  node.
+- Unsupported cycles, unbounded expansion, and unknown phase kinds fail with
+  clear errors before the first model call.
+- Mutation tests cover duplicate IDs, missing dependencies, invalid
+  authority, and illegal context edges.
+
 ## Milestone 2: Explicit Runtime State And Lifecycle
 
 Outcome: orchestration operates on typed state and validated transitions rather
@@ -454,10 +659,12 @@ than local variables and implicit event ordering.
 
 Priority: `P1`
 
+Status: Complete.
+
 Acceptance:
 
-- Run state contains run identity, loaded mode, phase results, artifact paths,
-  lifecycle status, and eval outcome.
+- Run state contains run identity, loaded modes, resolved pattern plan,
+  execution-node results, artifact paths, lifecycle status, and eval outcome.
 - State updates happen through small runtime-owned transitions.
 - Provider-specific configuration is not stored in core run state.
 
@@ -465,12 +672,14 @@ Acceptance:
 
 Priority: `P1`
 
+Status: Complete.
+
 Suggested states:
 
 ```text
 created
 running
-phases-completed
+execution-completed
 evaluating
 finalizing
 succeeded
@@ -485,19 +694,27 @@ Acceptance:
 - Trace terminal events are derived from lifecycle transitions.
 - Transition tests cover success, failure, and cancellation.
 
-### RS-003 - Add stable phase execution state
+### RS-003 - Add stable execution-node state
 
 Priority: `P1`
 
+Status: Complete.
+
 Acceptance:
 
-- Each configured phase has pending, running, completed, or failed status.
-- The runtime records provider, model, start time, end time, and output length.
-- The model cannot modify phase status.
+- Each planned execution node has pending, running, completed, failed, or
+  cancelled status.
+- Pipeline stages group node states without inventing a second execution
+  model.
+- The runtime records node ID, phase, mode, provider, model, start time, end
+  time, and output length.
+- The model cannot modify node or stage status.
 
 ### RS-004 - Inject run ID generation
 
 Priority: `P1`
+
+Status: Complete.
 
 Acceptance:
 
@@ -560,6 +777,8 @@ console logs or hidden process state.
 
 Priority: `P1`
 
+Status: Complete.
+
 Acceptance:
 
 - `trace.json` includes a schema version.
@@ -569,6 +788,8 @@ Acceptance:
 ### TA-002 - Centralize trace event names
 
 Priority: `P1`
+
+Status: Complete.
 
 Acceptance:
 
@@ -580,6 +801,8 @@ Acceptance:
 
 Priority: `P1`
 
+Status: Complete.
+
 Acceptance:
 
 - Phase, model-call, evaluation, and total-run durations are recorded.
@@ -590,16 +813,21 @@ Acceptance:
 
 Priority: `P1`
 
+Status: Complete.
+
 Acceptance:
 
 - Each `model.called` event pairs with one `model.completed` or
   `model.failed` event.
 - Correlation does not depend on event position alone.
+- Each call is attributed to one execution node and retry attempt.
 - Tests detect missing and duplicate completion events.
 
 ### TA-005 - Add sanitized failure events
 
 Priority: `P1`
+
+Status: Complete.
 
 Acceptance:
 
@@ -611,13 +839,16 @@ Acceptance:
 
 Priority: `P1`
 
+Status: Complete.
+
 Create a machine-readable run manifest containing:
 
 - run ID and outcome
 - mode name and version
 - provider and model names
 - start and end times
-- configured phase order
+- resolved pattern plan and authoritative node
+- execution-node and stage outcomes
 - artifact inventory
 - eval summary
 
@@ -695,6 +926,23 @@ Acceptance:
 - Temporary files remain inside the run directory and are cleaned up on
   success.
 
+### TA-012 - Add typed trace payload contracts
+
+Priority: `P1`
+
+Centralizing event names does not prevent payload-key drift between producers,
+evals, views, and future readers.
+
+Acceptance:
+
+- Core trace events have small typed payload records or builders with required
+  fields.
+- Producers and consumers do not repeat magic strings for required payload
+  keys such as node ID, phase, call ID, stage, and outcome.
+- Serialized trace data remains plain JSON and does not expose implementation
+  type names.
+- Compatibility tests cover the payloads used by evals and static views.
+
 ## Milestone 4: Deterministic Evaluation
 
 Outcome: evals check runtime invariants and output structure precisely without
@@ -754,20 +1002,29 @@ Acceptance:
   modes, and a failure fixture proves the eval fails for an inert revision.
 - Thresholds are runtime-owned configuration, not model output.
 
-### EV-003 - Evaluate phase order and cardinality
+### EV-003 - Evaluate declared plan execution and cardinality
 
 Priority: `P1`
 
+Status: Complete.
+
 Acceptance:
 
-- The trace contains exactly one successful completion for each configured
-  phase.
-- Main, critic, and revision completion order matches the mode.
-- Unexpected duplicate phase executions fail the eval.
+- The trace contains exactly one terminal execution outcome for each declared
+  plan node.
+- Required dependency and stage ordering matches the resolved pattern plan.
+- Each node's recorded context source IDs match its declared context inputs.
+- Missing, duplicate, or undeclared node executions fail the eval.
+- The authoritative node completed successfully and matches the result used
+  for output-contract evaluation.
+- The check works for single-pass, critic-revision, and linear-pipeline
+  without switching on pattern name.
 
 ### EV-004 - Evaluate model call pairing
 
 Priority: `P1`
+
+Status: Complete.
 
 Acceptance:
 
@@ -778,6 +1035,8 @@ Acceptance:
 ### EV-005 - Evaluate terminal trace integrity
 
 Priority: `P1`
+
+Status: Complete.
 
 Acceptance:
 
@@ -910,15 +1169,19 @@ Acceptance:
 - Documentation names the configured phases and intended output.
 - Validation remains deterministic and does not judge prose quality.
 
-### MO-008 - Run every built-in mode in integration tests
+### MO-008 - Validate every built-in mode and prompt variant
 
 Priority: `P1`
 
 Acceptance:
 
-- `frame`, `challenge`, and `synthesize` all pass with the mock provider.
-- Every run writes valid required artifacts and revision traces.
-- Test data is shared without hiding mode-specific assertions.
+- `frame`, `challenge`, `synthesize`, and each checked-in `lens` prompt
+  variant load and validate without a model call.
+- Validation covers manifests, prompt containment, required phases, and output
+  contracts.
+- Test data is shared without hiding mode- or lens-specific assertions.
+
+Full mock execution remains covered by `RT-001`.
 
 ## Milestone 6: Offline Regression Harness
 
@@ -1017,6 +1280,19 @@ Acceptance:
   phase output lengths.
 - It does not attempt semantic quality scoring.
 - Comparison output is an artifact, not a web service.
+
+### RG-008 - Compare orchestration patterns on fixed cases
+
+Priority: `P2`
+
+Acceptance:
+
+- A data-driven matrix runs selected cases through multiple registered
+  patterns with the mock or replay provider.
+- The summary compares model-call count, executed nodes, eval status,
+  durations, output lengths, and artifact paths.
+- Each underlying run remains independent and inspectable.
+- The report does not rank answer quality or use an LLM judge.
 
 ## Milestone 7: Model Provider Hardening
 
@@ -1224,7 +1500,7 @@ Acceptance:
 
 Priority: `Research`
 
-Research status: Complete on 2026-06-13. Implementation is deferred until the
+Research status: `complete` on 2026-06-13. Implementation is deferred until the
 tool policy and run-state prerequisites land.
 
 Design note:
@@ -1376,8 +1652,8 @@ Priority: `P1`
 
 Acceptance:
 
-- Every built-in mode runs through main, critic, revision, eval, and artifact
-  finalization.
+- Every built-in mode and checked-in lens variant runs through its compatible
+  mock pattern, eval, and artifact finalization.
 - Assertions cover mode-specific headings.
 
 ### RT-002 - Add cancellation boundary tests
@@ -1437,6 +1713,8 @@ Acceptance:
 - Core does not reference CLI.
 - Orchestration does not reference provider implementation types.
 - Eval and artifact code do not reference GitHub or Azure configuration.
+- Pattern implementations do not coordinate runtime services directly.
+- After `OP-012`, the orchestrator does not branch on a pattern name.
 
 ### RT-008 - Add credential-free CI
 
@@ -1448,6 +1726,19 @@ Acceptance:
 - No secrets are required.
 - Generated `outputs/` content is not committed.
 - The documented local commands match CI.
+
+### RT-009 - Add a pattern conformance test kit
+
+Priority: `P1`
+
+Acceptance:
+
+- Every registered pattern runs through shared tests for deterministic
+  planning, unique node IDs, valid dependencies, bounded execution, and one
+  authoritative output.
+- The kit verifies that a model response cannot mutate the remaining plan.
+- Pipeline configurations are covered as data, not one-off test code.
+- Adding a registered pattern without conformance coverage fails tests.
 
 ## Milestone 11: Static Inspection Improvements
 
@@ -1499,6 +1790,40 @@ These items fit the runtime thesis, but should stay out of implementation until
 their prerequisites land. Each item requires a short design note or spike
 before implementation.
 
+### Research Governance
+
+The research-intake freeze through `OP-011`, `OP-012`, and `OP-013` is now
+satisfied. New research should still replace, merge, or explicitly outrank an
+existing item rather than only expanding the backlog.
+
+These rules apply to both `Research Backlog` and `Agent Systems Research`.
+
+No more than two research items should be active at once. Every active item
+must have a design note under `docs/research/` containing:
+
+- a falsifiable hypothesis or concrete design question
+- prerequisites and assumptions
+- a timebox
+- the smallest useful experiment
+- baseline and negative control
+- required fixtures, traces, and artifacts
+- reproduction commands
+- evidence and limitations
+- a final disposition: promote, defer, merge, or reject
+
+Research status values are `proposed`, `active`, `complete`, `deferred`,
+`merged`, and `rejected`. An unlabeled research item is `proposed`. `Complete`
+means the question produced a documented decision; it does not mean
+implementation is approved or finished.
+
+Research priority:
+
+1. `RB-008` Bounded scatter-gather orchestration.
+2. `RB-009` Context projection and information barriers.
+3. `RB-010` Static boundedness analysis.
+4. `RB-011` Speculative execution with deterministic commit.
+5. `RB-012` Model portfolio scheduling.
+
 ### RB-001 - One bounded contract-repair pass
 
 If deterministic eval fails only for repairable output structure, the runtime
@@ -1521,7 +1846,7 @@ Guardrails:
 
 ### RB-002 - Resume an interrupted run
 
-Research status: Complete on 2026-06-13. Safe resume is limited to verified
+Research status: `complete` on 2026-06-13. Safe resume is limited to verified
 checkpoints with no ambiguous external model call.
 
 Design note:
@@ -1534,7 +1859,7 @@ Prerequisites:
 
 - immutable run state
 - lifecycle state machine
-- stable phase execution state
+- stable execution-node state
 - atomic artifact writes
 - model call correlation IDs
 
@@ -1546,15 +1871,11 @@ Guardrails:
 
 ### RB-003 - Candidate generation with deterministic selection
 
-Research whether multiple drafts can be useful when selection is based only on
-declared deterministic contracts.
+Research status: `merged` into `RB-011`.
 
-Guardrails:
-
-- No LLM judge.
-- No model-controlled winner selection.
-- Selection criteria must be declared before generation.
-- All candidates remain inspectable.
+Candidate generation is the simplest experimental configuration of
+speculative execution with deterministic commit. Do not implement it as a
+separate orchestration mechanism.
 
 ### RB-004 - Trace hash chain
 
@@ -1584,6 +1905,845 @@ Guardrails:
 - Do not attempt semantic prompt evaluation.
 - Do not use an LLM to judge whether the new mode is better.
 - Report file-level and prompt-level provenance only.
+
+### RB-006 - Bounded conditional routing
+
+Research whether a pattern may choose among predeclared branches using only a
+runtime-owned deterministic predicate.
+
+Example predicates:
+
+- a structural eval failed with a declared repairable check ID
+- a provider failed with a typed transient or terminal category
+- a runtime budget has enough capacity for a predeclared fallback
+
+Guardrails:
+
+- Every possible branch and maximum call count is declared before execution.
+- Free-form model content cannot create a branch or choose a route.
+- The decision, inputs, matched predicate, and skipped nodes are traced.
+- No generic router, supervisor, or dynamic graph engine is introduced.
+- `RB-001` remains the first concrete use case to evaluate.
+
+### RB-007 - Runtime-owned blackboard
+
+Research a run-scoped, typed blackboard that lets declared execution nodes
+share structured intermediate facts without passing every value through
+free-form prompt context.
+
+Vocabulary: extend the canonical `BlackboardEntry`, typed information
+references, provenance, lifecycle, and runtime commit authority from `CF-001`.
+Do not create a parallel shared-state record.
+
+Questions:
+
+- Are entries immutable and append-only, or can the runtime replace a value
+  under a declared key?
+- How do pattern plans declare which nodes may read or propose writes to each
+  blackboard section?
+- Which component validates and commits a model-proposed entry?
+- How are entry schema, producer node, source evidence, timestamp, and
+  revision history represented?
+- How are conflicts, missing entries, and size limits handled
+  deterministically?
+- Which blackboard snapshots belong in traces and artifacts without
+  duplicating sensitive or large content?
+
+Prerequisites:
+
+- typed pattern execution plans
+- immutable run state
+- stable execution-node state
+- typed trace payload contracts
+
+Guardrails:
+
+- The blackboard is scoped to one run and is not long-term memory.
+- The runtime owns keys, schemas, permissions, validation, and commits.
+- Model output may propose content but cannot create sections, widen access,
+  delete history, or commit state directly.
+- Reads and accepted or rejected write proposals are attributable to an
+  execution node and traceable.
+- Blackboard contents cannot select tools, approve actions, alter the plan, or
+  declare completion.
+- Persistence stays inside the run output directory.
+- Do not introduce a generic tuple-space, message bus, or multi-agent
+  framework.
+
+### RB-008 - Bounded scatter-gather orchestration
+
+Research a pattern that runs a fixed set of independent reasoning nodes in
+parallel and gathers their typed outputs into one declared synthesis node.
+
+Questions:
+
+- How does a plan prove that scatter nodes are independent and safe to run
+  concurrently?
+- How are output contracts declared for each branch and for the gather node?
+- Does the gather node receive full outputs, structured projections, or
+  artifact references?
+- How are branch failures, timeouts, cancellation, and partial completion
+  represented?
+- What ordering is used when concurrent results are assembled into context
+  and artifacts?
+
+Prerequisites:
+
+- typed pattern execution plans
+- one runtime executor
+- stable execution-node state
+- model call correlation IDs
+- runtime-owned execution budgets
+
+Guardrails:
+
+- Branch count and maximum model calls are fixed before execution.
+- The model cannot spawn branches or extend the gather phase.
+- Concurrency does not change deterministic artifact or context ordering.
+- The gather node cannot hide missing or failed branches.
+- No worker may directly invoke another worker.
+
+### RB-009 - Context projection and information barriers
+
+Research typed projections that give each execution node only the input,
+prior results, evidence, and blackboard entries declared by the pattern plan.
+
+Vocabulary: extend the canonical `ContextProjection` and
+`ContextProjectionItem` contracts from `CF-001`. Projection inputs refer to
+canonical observations, evidence, claims, beliefs, and blackboard entries.
+
+Scope boundary: this item owns node-specific disclosure and information-flow
+policy. `AR-004` owns retention, compaction, and eviction across the run.
+
+Questions:
+
+- How are projections declared without embedding prompt prose in runtime code?
+- Which metadata accompanies projected values so provenance survives
+  summarization or transformation?
+- How are absent, redacted, oversized, or unauthorized values represented?
+- Can the runtime prove that a node did not receive undeclared context?
+- How should projections apply to model requests, tool requests, traces, and
+  artifacts?
+
+Prerequisites:
+
+- typed pattern execution plans
+- stable execution-node state
+- typed trace payload contracts
+- `RB-007` runtime-owned blackboard research
+
+Guardrails:
+
+- Default visibility is deny.
+- A model cannot request broader context or discover hidden entry names.
+- Projection is performed by runtime code before provider serialization.
+- Redaction and truncation are explicit, traceable transformations.
+- Provider-specific clients receive only the completed projection.
+
+### RB-010 - Static boundedness analysis
+
+Research a plan analyzer that computes hard upper bounds before execution.
+
+Candidate bounds:
+
+- execution nodes and stages
+- model calls and retry attempts
+- tool calls by category
+- parallel width
+- input and output characters
+- estimated duration, tokens, and cost when metadata is available
+
+Questions:
+
+- Which bounds can be proven exactly and which are conservative estimates?
+- How are nested patterns and predeclared conditional branches expanded?
+- How are unknown provider token usage and latency represented?
+- Which plan properties make analysis impossible and should therefore be
+  rejected?
+
+Prerequisites:
+
+- typed pattern execution plans
+- pattern plan validation
+- runtime-owned execution budgets
+- common model response metadata for token and cost extensions
+
+Guardrails:
+
+- Unknown usage is never treated as zero.
+- A plan that exceeds a hard configured limit fails before its first model
+  call.
+- Runtime counters still enforce limits because static analysis is not a
+  substitute for execution-time checks.
+- Analysis does not permit open-ended loops or model-created nodes.
+
+### RB-011 - Speculative execution with deterministic commit
+
+Research running a fixed set of alternative nodes concurrently while allowing
+the runtime to commit exactly one authoritative result through predeclared,
+deterministic criteria.
+
+This item subsumes `RB-003`.
+
+Potential commit criteria:
+
+- output-contract satisfaction
+- explicit deterministic score
+- provider failure category
+- measured latency or cost within a declared quality tier
+- stable tie-breaking by plan order
+
+Questions:
+
+- Are losing alternatives allowed to finish, or should they be cancelled?
+- How are completed but uncommitted outputs retained for inspection?
+- Can commit occur early without making results timing-dependent?
+- How are provider retries distinguished from speculative alternatives?
+
+Prerequisites:
+
+- bounded scatter-gather orchestration research
+- deterministic evaluation
+- model call correlation IDs
+- runtime-owned execution budgets
+- typed run outcome and lifecycle state
+
+Guardrails:
+
+- Alternatives and commit rules are fixed before execution.
+- No LLM judge or model-reported confidence selects the winner.
+- Exactly one result is committed, and every alternative remains traceable.
+- Timing cannot silently change selection unless latency is an explicit
+  declared criterion.
+- Speculation cannot increase the precomputed execution bound.
+
+### RB-012 - Model portfolio scheduling
+
+Research runtime policy that assigns a registered model provider and model to
+each execution node using declared requirements and measured operational
+metadata.
+
+Candidate policy inputs:
+
+- required capabilities and context size
+- allowed providers and data-handling restrictions
+- historical structural eval pass rate
+- typed provider health and failure categories
+- latency, token usage, and estimated cost
+- deterministic fallback order
+
+Questions:
+
+- Which metadata is configuration, which is measured locally, and which may be
+  trusted from providers?
+- How are stale or insufficient measurements represented?
+- Can scheduling remain reproducible when health and pricing change?
+- How are fallback attempts budgeted and traced?
+- Should a run snapshot the effective portfolio policy and measurements used?
+
+Prerequisites:
+
+- common model response metadata
+- typed provider failure categories
+- provider configuration validation
+- offline regression harness
+- static boundedness analysis research
+
+Guardrails:
+
+- The runtime selects the provider and model; model output cannot influence
+  scheduling.
+- Allowlisted providers, privacy constraints, and maximum cost are hard
+  policy, not optimization preferences.
+- Unknown measurements never become favorable defaults.
+- The effective decision inputs, selected target, fallback order, and reason
+  are recorded without credentials.
+- Tests use fake providers and deterministic metrics; no external credentials
+  are required.
+
+## Agent Systems Research
+
+These items study agent reliability beyond orchestration topology. They focus
+on how an agent receives information, represents uncertainty, interacts with
+tools and people, and is evaluated as a stateful system.
+
+Agent-systems research priority:
+
+This ranks frontier research attention, not implementation order. Security,
+state, trace, eval, and tool-policy prerequisites remain authoritative. The
+linked articles are starting points for design notes; many are recent
+preprints and their claims should be reproduced or independently validated
+before shaping runtime policy.
+
+1. `AR-009` Behavioral contracts and temporal runtime shields.
+2. `AR-010` Structured belief state under partial observability.
+3. `AR-017` Explicit environment state and causal world models.
+4. `AR-011` Causal replay and counterfactual responsibility.
+5. `AR-012` Verifier-guided generative optimization.
+6. `AR-013` Claim-evidence provenance graph.
+7. `AR-014` Value-of-information sensing and clarification.
+8. `AR-015` Information fidelity and periodic re-grounding.
+9. `AR-016` Adaptive test-time compute policy.
+10. `AR-001` Untrusted observation and prompt-injection boundaries.
+11. `AR-002` Stateful trajectory evaluation environments.
+12. `AR-003` Abstention and escalation policy over belief state.
+13. `AR-004` Run-scoped context lifecycle and loss-accounted compaction.
+14. `AR-005` Typed tool effects and state transition contracts.
+15. `AR-006` Metamorphic and adversarial robustness testing.
+16. `AR-007` Offline policy improvement from run traces.
+17. `AR-008` Human intervention and control transfer.
+
+### AR-001 - Untrusted observation and prompt-injection boundaries
+
+Research how the runtime distinguishes instructions from untrusted data
+returned by tools, files, retrieval, and external providers.
+
+Questions:
+
+- How are origin, trust level, sensitivity, and allowed use represented on
+  every context value?
+- Can taint-like labels survive projection, summarization, blackboard writes,
+  and artifact references?
+- Which tool requests must be rejected when their arguments derive from
+  untrusted instructions?
+- How can deterministic fixtures measure task success and attack resistance
+  separately?
+- Which defenses belong in runtime policy rather than provider prompts?
+
+Guardrails:
+
+- External content is data and cannot grant authority.
+- Prompt instructions are not treated as a security boundary.
+- Untrusted content cannot widen tool permissions, disclose hidden context,
+  approve actions, or alter the execution plan.
+- Security traces record provenance and policy decisions without copying
+  sensitive payloads.
+- Research uses mock tools and local adversarial fixtures only.
+
+### AR-002 - Stateful trajectory evaluation environments
+
+Research small deterministic environments for evaluating agents across
+multiple observations, tool calls, and state transitions rather than grading
+only the final text.
+
+Questions:
+
+- How are initial state, allowed actions, hidden state, milestones, and final
+  invariants represented?
+- Which trajectory variations should be accepted when they reach the same
+  valid end state?
+- How are invalid intermediate side effects distinguished from harmless
+  alternative paths?
+- Can the same environment exercise mock, replay, and external providers?
+- How are environment state and run artifacts kept isolated?
+
+Guardrails:
+
+- Environments are local, deterministic, credential-free, and resettable.
+- The runtime, not the model, applies state transitions.
+- Evaluation checks explicit milestones and end-state invariants.
+- No autonomous shell, browser, or production-service access is introduced.
+- The first environments should be narrow enough to inspect by hand.
+
+### AR-003 - Abstention and escalation policy over belief state
+
+Research when the runtime should abstain, select a fallback, or request human
+input based on the structured belief state defined by `AR-010`.
+
+Scope boundary: `AR-010` owns belief representation and updates. This item owns
+runtime decisions triggered by that state.
+
+Candidate states:
+
+- supported
+- contradicted
+- insufficient-evidence
+- stale
+- unknown
+
+Questions:
+
+- Which states are computed deterministically and which may only be model
+  proposals?
+- How are contradictory claims and evidence represented without forcing
+  premature consensus?
+- Which declared thresholds trigger abstention, fallback, or escalation?
+- How can calibration be evaluated without trusting self-reported confidence?
+- How does epistemic state interact with the blackboard and evidence phases?
+
+Guardrails:
+
+- Model confidence is never treated as proof.
+- The runtime owns state transitions and escalation thresholds.
+- Abstention is a valid typed outcome, not a provider failure.
+- Unsupported claims remain inspectable and cannot silently become facts.
+- No LLM judge is required for MVP evaluation.
+
+### AR-004 - Run-scoped context lifecycle and loss-accounted compaction
+
+Research how a long run admits, retains, projects, compresses, and evicts
+context while preserving provenance and making information loss visible.
+
+Vocabulary: compacted values remain canonical information records with
+`InformationProvenance` inputs and explicit lifecycle state from `CF-001`;
+this item does not introduce a second context store.
+
+Scope boundary: `RB-009` owns which values a node may receive. This item owns
+how admitted values are retained, compacted, and evicted over time.
+
+Questions:
+
+- Which values must remain lossless and which may be summarized?
+- How does a compacted value reference its source entries and transformation?
+- What deterministic checks can detect missing required facts or citations?
+- When should the runtime reject compaction and exceed a budget instead?
+- How are raw and compacted context retained for replay and evaluation?
+
+Guardrails:
+
+- This is run-scoped context management, not long-term memory.
+- The runtime decides when compaction is allowed and which schema it must
+  satisfy.
+- The model may propose a summary but cannot delete source context or hide
+  reported loss.
+- Compaction records input size, output size, provenance, and validation
+  result.
+- Tests compare full-context and compacted-context behavior on fixed cases.
+
+### AR-005 - Typed tool effects and state transition contracts
+
+Research tool descriptors that declare more than names and argument schemas:
+preconditions, read and write sets, side effects, idempotency, reversibility,
+and expected postconditions.
+
+The resulting effect model is an input to the behavioral contracts in
+`AR-009`; this item does not define a second enforcement system.
+
+Questions:
+
+- Which effects can be verified before execution and which require observing
+  the result?
+- How are stale preconditions and conflicting writes handled?
+- Can dry-run simulation use the same contracts as real execution?
+- How are retries restricted for non-idempotent operations?
+- What evidence proves that a postcondition was satisfied?
+
+Guardrails:
+
+- Tool contracts do not authorize execution; `ToolPolicy` remains
+  authoritative.
+- Execute-category tools remain blocked by default.
+- Unknown effects receive the most restrictive policy.
+- Model output cannot redefine a tool's effects or claim a postcondition
+  succeeded.
+- MVP research uses `MockToolProvider` and in-run state only.
+
+### AR-006 - Metamorphic and adversarial robustness testing
+
+Research deterministic transformations that should preserve, constrain, or
+predictably change agent behavior.
+
+Candidate transformations:
+
+- reorder irrelevant context
+- add benign distractors
+- vary formatting and equivalent wording
+- inject stale, conflicting, or malicious observations
+- fail or delay one tool result
+- change culture, timezone, or path representation
+
+Questions:
+
+- Which invariants should remain stable under each transformation?
+- How are expected differences distinguished from regressions?
+- Can tests localize susceptibility to a model, mode, pattern, tool, or
+  runtime policy?
+- Which robustness metrics remain meaningful without semantic judging?
+
+Guardrails:
+
+- Every mutation and expected invariant is declared before execution.
+- Tests compare typed outcomes, traces, decisions, and artifacts.
+- No mutation may access external services or credentials.
+- Robustness failures remain inspectable as ordinary run artifacts.
+
+### AR-007 - Offline policy improvement from run traces
+
+Research a controlled process that uses completed run traces and eval results
+to propose changes to prompts, budgets, routing thresholds, or provider
+policy without modifying live behavior automatically.
+
+Counterfactual evidence from `AR-011` should be preferred over heuristic blame
+when proposing changes from failed runs.
+
+Questions:
+
+- Which trace fields are suitable inputs without exposing private content?
+- How are proposals linked to the failures or regressions they address?
+- What replay or regression evidence is required before accepting a change?
+- How are overfitting and evaluation leakage detected?
+- Which policy surfaces must never be model-generated?
+
+Guardrails:
+
+- No online self-modification or autonomous deployment.
+- Proposed changes are artifacts requiring explicit human review.
+- Acceptance requires credential-free replay or regression evidence.
+- Training and fine-tuning infrastructure remain out of scope.
+- Historical runs remain immutable.
+
+### AR-008 - Human intervention and control transfer
+
+Research explicit runtime semantics for pausing, inspecting, approving,
+correcting, or terminating a run at predeclared checkpoints.
+
+Questions:
+
+- What state and artifacts must be persisted before yielding control?
+- Which fields may a human amend without rewriting run history?
+- How is a correction distinguished from approval or cancellation?
+- Does continuation create a new run, a linked segment, or a resumed
+  checkpoint?
+- How are stale approvals invalidated when inputs or plans change?
+
+Guardrails:
+
+- Intervention points and allowed actions are declared by runtime policy.
+- Human input cannot silently mutate prior trace events or artifacts.
+- Approval is scoped, attributable, expiring, and revocable before use.
+- A paused run performs no background work.
+- Mock tests cover approval, correction, rejection, timeout, and cancellation.
+
+### AR-009 - Behavioral contracts and temporal runtime shields
+
+Research machine-checkable agent contracts containing preconditions,
+invariants, temporal constraints, governance rules, and declared recovery
+behavior.
+
+Example properties:
+
+- authenticate before reading protected data
+- obtain scoped approval before a write tool
+- never use untrusted content as tool authority
+- do not finalize while required evidence remains unresolved
+- after a denied action, do not retry it through an equivalent tool
+
+Questions:
+
+- Which contract language is expressive enough without becoming a general
+  theorem-proving platform?
+- Which properties can be checked before a model call, before a tool call, or
+  only after observing an effect?
+- How are contracts composed across nested patterns and tool providers?
+- What is the difference between a hard violation, a recoverable violation,
+  and an eval failure?
+- Can the runtime propose a compliant alternative without delegating policy
+  decisions to the model?
+
+Guardrails:
+
+- Runtime enforcement is authoritative; prompt instructions are advisory.
+- Hard constraints block execution before side effects occur.
+- Recovery paths are predeclared and bounded.
+- Contract violations, blocked actions, and recovery attempts are traced.
+- Initial work uses deterministic predicates and state machines; an SMT
+  solver is optional research, not an MVP dependency.
+
+Relevant research:
+
+- [Enforcing Temporal Constraints for LLM Agents](https://arxiv.org/abs/2512.23738)
+- [Agent Behavioral Contracts: Formal Specification and Runtime Enforcement
+  for Reliable Autonomous AI Agents](https://arxiv.org/abs/2602.22302)
+
+### AR-010 - Structured belief state under partial observability
+
+Research a typed belief state that separates observations, candidate
+hypotheses, uncertainty, contradictions, and action policy.
+
+Vocabulary: extend the canonical `Observation`, `Evidence`, `Claim`, and
+runtime-committed `Belief` contracts from `CF-001`. This item owns belief
+transition rules, not a replacement representation.
+
+Questions:
+
+- How are atomic beliefs represented without pretending natural-language
+  probabilities are calibrated?
+- How does new evidence support, weaken, supersede, or leave a belief
+  unresolved?
+- Should alternative hypotheses remain visible until deterministic evidence
+  eliminates them?
+- Which belief fields may be model-proposed, and which are runtime-computed?
+- How do belief state, blackboard entries, evidence provenance, and
+  abstention interact?
+
+Guardrails:
+
+- Observations are immutable and distinct from inferred beliefs.
+- The runtime owns belief identity, provenance, lifecycle, and update rules.
+- Model-reported confidence is metadata, not proof.
+- Contradictions are retained rather than silently overwritten.
+- This remains run-scoped and does not introduce long-term personal memory.
+
+Relevant research:
+
+- [Agent-BRACE: Decoupling Beliefs from Actions in Long-Horizon Tasks via
+  Verbalized State Uncertainty](https://arxiv.org/abs/2605.11436)
+- [Belief Memory: Agent Memory Under Partial
+  Observability](https://arxiv.org/abs/2605.05583)
+
+### AR-017 - Explicit environment state and causal world models
+
+Research a typed separation among actual environment state, observable
+signals, runtime state, agent belief state, actions, and state transitions.
+Explore whether a declared or learned causal world model can simulate proposed
+actions and explain observed state changes.
+
+Questions:
+
+- Which environments have an authoritative state that the runtime can inspect,
+  and which expose observations only?
+- How are action preconditions, transition rules, exogenous events, and hidden
+  variables represented?
+- Can a simulator reject impossible actions or estimate counterfactual
+  outcomes before commitment?
+- How is model mismatch detected when predicted and observed transitions
+  diverge?
+- Which causal structures are declared by humans, inferred from traces, or
+  merely proposed by a model?
+- How do world models support belief updates, value-of-information decisions,
+  causal replay, and verifier-guided optimization?
+
+Guardrails:
+
+- Runtime state, belief state, and environment state remain distinct types.
+- An inferred world model is advisory until validated against deterministic
+  transition fixtures.
+- Simulated success never substitutes for observing a real postcondition.
+- Model-generated causal edges do not become authoritative without runtime
+  validation.
+- Initial experiments use small deterministic environments and perform no
+  production side effects.
+- Training a general learned world model is outside the project scope.
+
+Relevant research:
+
+- [Language Agents Meet Causality: Bridging LLMs and Causal World
+  Models](https://arxiv.org/abs/2410.19923)
+- [CausalPlan: Empowering Efficient LLM Multi-Agent Collaboration Through
+  Causality-Driven Planning](https://arxiv.org/abs/2508.13721)
+
+### AR-011 - Causal replay and counterfactual responsibility
+
+Research whether controlled replay with explicit interventions can identify
+which earlier decisions caused a failed run.
+
+Candidate interventions:
+
+- replace one model response with a known-good fixture
+- remove one observation or blackboard write
+- substitute one tool result
+- force one policy decision or context projection
+- hold all other recorded inputs constant where possible
+
+Questions:
+
+- What does it mean to hold a stochastic provider policy constant?
+- Which effects can be established with one deterministic replay, and which
+  require repeated samples and uncertainty intervals?
+- How are interacting causes distinguished from one pivotal step?
+- How can replay avoid mutating or misrepresenting the original run?
+- Which counterfactual repairs are safe to turn into regression fixtures?
+
+Guardrails:
+
+- The original run and trace remain immutable.
+- Every intervention is explicit, typed, and recorded in a new run.
+- Causal claims include assumptions and uncertainty; correlation is not
+  labeled as causation.
+- No production side effects are replayed.
+- MVP work uses mock or recorded providers and deterministic environments.
+
+Relevant research:
+
+- [Causal Agent Replay: Counterfactual Attribution for LLM-Agent
+  Failures](https://arxiv.org/abs/2606.08275)
+- [CausalFlow: Causal Attribution and Counterfactual Repair for LLM Agent
+  Failures](https://arxiv.org/abs/2605.25338)
+
+### AR-012 - Verifier-guided generative optimization
+
+Research a bounded loop where the model proposes a candidate artifact, an
+executable verifier returns structured feedback, and the runtime permits a
+fixed number of revisions under a declared objective.
+
+Potential verifier types:
+
+- compiler or parser
+- deterministic simulator
+- constraint solver
+- unit-test harness
+- schema and invariant checker
+- numeric objective with hard feasibility constraints
+
+Questions:
+
+- How are feasibility, objective score, and diagnostic feedback separated?
+- What termination rule handles diminishing returns under a fixed budget?
+- How are multiple feasible candidates compared without an LLM judge?
+- Which verifier outputs are safe and useful to return to the model?
+- How are best-so-far, latest, and authoritative candidates distinguished?
+
+Guardrails:
+
+- The verifier, objective, iteration limit, and budget are fixed before
+  execution.
+- The runtime owns candidate selection and termination.
+- A model cannot alter the verifier, objective, or success threshold.
+- Every candidate and verifier result remains inspectable.
+- No arbitrary shell execution is introduced; initial verifiers are in-process
+  deterministic components or tightly controlled test fixtures.
+
+Relevant research:
+
+- [Frontier-Eng: Benchmarking Self-Evolving Agents on Real-World Engineering
+  Tasks with Generative Optimization](https://arxiv.org/abs/2604.12290)
+
+### AR-013 - Claim-evidence provenance graph
+
+Research a typed graph connecting observations, sources, tool results,
+blackboard entries, intermediate claims, transformations, actions, and final
+claims.
+
+Vocabulary: graph nodes use `AgentInformationReference` and the canonical
+information identities from `CF-001`. Graph edges extend existing provenance;
+they do not duplicate content into a separate truth store.
+
+Candidate relations:
+
+- derived-from
+- supports
+- contradicts
+- supersedes
+- transformed-by
+- used-to-authorize
+- cited-by
+
+Questions:
+
+- What is the smallest useful provenance unit: artifact, section, claim, or
+  span?
+- How are claims normalized without assigning semantic authority to a model?
+- Can deterministic checks find unsupported, stale, circular, or
+  contradicted claims?
+- How are privacy, redaction, and deleted source material represented?
+- How does provenance support debugging, replay, verification, and recovery?
+
+Guardrails:
+
+- Provenance records lineage, not truth by itself.
+- Source content remains immutable and separately addressable.
+- Model-generated citations cannot create support edges without runtime
+  validation.
+- Graph serialization is bounded and stored inside the run directory.
+- Initial evaluation uses planted fixtures with known support relationships.
+
+Relevant research:
+
+- [From Agent Traces to Trust: Evidence Tracing and Execution Provenance in
+  LLM Agents](https://arxiv.org/abs/2606.04990)
+- [WorldReasoner: Evaluating Whether Language Model Agents Forecast Events
+  with Valid Reasoning](https://arxiv.org/abs/2606.11816)
+
+### AR-014 - Value-of-information sensing and clarification
+
+Research runtime policy for deciding whether another observation, tool call,
+or human clarification is worth its cost before committing to an action.
+
+Questions:
+
+- How are uncertainty reduction, expected utility, action risk, latency,
+  monetary cost, and human interruption cost represented?
+- Which quantities can be measured, bounded, or only configured?
+- How does the policy choose between asking a human, calling a tool,
+  abstaining, or acting?
+- How are repeated low-value questions prevented?
+- Can fixed synthetic environments provide known value-of-information ground
+  truth?
+
+Guardrails:
+
+- The runtime decides whether information gathering is permitted.
+- Model-proposed uncertainty and utility are untrusted inputs.
+- High-impact actions may require information regardless of estimated value.
+- Every clarification or sensing decision records its inputs and reason.
+- Initial work uses deterministic tables or simulators, not learned policies.
+
+Relevant research:
+
+- [Value of Information: A Framework for Human-Agent
+  Communication](https://arxiv.org/abs/2601.06407)
+
+### AR-015 - Information fidelity and periodic re-grounding
+
+Research how factual distortion accumulates as information passes through
+tools, summaries, projections, handoffs, blackboard updates, and model
+responses.
+
+Questions:
+
+- Which deterministic fidelity metrics work for structured facts, citations,
+  and state transitions?
+- How is semantic fidelity evaluated without making an LLM judge
+  authoritative?
+- When should the runtime re-read original evidence instead of trusting a
+  derived context value?
+- Can each transformation declare an expected loss budget?
+- How do fidelity budgets compose across a run?
+
+Guardrails:
+
+- Derived context retains links to lossless source material.
+- Unknown fidelity is not treated as perfect fidelity.
+- Re-grounding triggers and maximum intervals are runtime policy.
+- A fidelity failure cannot be repaired by merely increasing model confidence.
+- MVP experiments use planted facts and deterministic transformations.
+
+Relevant research:
+
+- [Information Fidelity in Tool-Using LLM Agents: A Martingale Analysis of the
+  Model Context Protocol](https://arxiv.org/abs/2602.13320)
+
+### AR-016 - Adaptive test-time compute policy
+
+Research runtime allocation of additional candidates, revisions, tool calls,
+verification, or model capacity according to expected benefit and remaining
+budget.
+
+Questions:
+
+- Which observable signals justify more depth, more width, a stronger model,
+  or early termination?
+- How is the verification gap measured when generating alternatives is easier
+  than selecting among them?
+- Can a policy remain deterministic for a fixed trace and configuration?
+- How are quality tiers and diminishing returns represented?
+- What offline evidence is required before changing allocation policy?
+
+Guardrails:
+
+- Hard maximum calls, duration, tokens, and cost are fixed before execution.
+- The runtime owns allocation and termination decisions.
+- Model requests for more compute are advisory only.
+- More sampling is not assumed to improve quality without a valid verifier.
+- Initial policies are explicit rules evaluated through replay and fixed
+  suites, not online reinforcement learning.
+
+Relevant research:
+
+- [Benchmark Test-Time Scaling of General LLM
+  Agents](https://arxiv.org/abs/2602.18998)
+- [Frontier-Eng: Benchmarking Self-Evolving Agents on Real-World Engineering
+  Tasks with Generative Optimization](https://arxiv.org/abs/2604.12290)
 
 ## Runtime Experiments
 
@@ -1854,5 +3014,13 @@ intent:
   one pull request.
 - Every behavior change includes focused tests.
 - Update this file when an item changes priority or scope.
+- Keep one explicit implementation queue and finish or reprioritize it before
+  starting work from later milestones.
+- Do not promote a research item into implementation without a completed
+  design note and an explicit `promote` disposition.
+- When two items converge, mark one `merged` and name the surviving owner
+  rather than maintaining duplicate acceptance criteria.
+- Review the research priority lists after each completed milestone; do not
+  treat their numbering as permanent.
 - Mark an item complete only when tests, mock execution, artifacts, trace, eval,
   provider isolation, and README behavior remain valid.

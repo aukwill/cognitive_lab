@@ -2,12 +2,24 @@ using System.Net;
 using System.Text;
 using CognitiveRuntime.Core.Abstractions;
 using CognitiveRuntime.Core.IO;
+using CognitiveRuntime.Core.Persistence;
 using CognitiveRuntime.Core.Views;
 
 namespace CognitiveRuntime.Core.Artifacts;
 
 public sealed class HtmlRunViewWriter : IRunViewWriter
 {
+    private readonly IArtifactStore _artifactStore;
+    private readonly TimeProvider _timeProvider;
+
+    public HtmlRunViewWriter(
+        IArtifactStore? artifactStore = null,
+        TimeProvider? timeProvider = null)
+    {
+        _artifactStore = artifactStore ?? new NullArtifactStore();
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
+
     public async Task<string> WriteAsync(
         RunViewModel viewModel,
         CancellationToken cancellationToken = default)
@@ -21,9 +33,19 @@ public sealed class HtmlRunViewWriter : IRunViewWriter
             viewModel.Run.OutputDirectory,
             outputPath);
 
+        var content = Render(viewModel);
         await FilePersistence.WriteAllTextAtomicAsync(
             outputPath,
-            Render(viewModel),
+            content,
+            cancellationToken);
+        await _artifactStore.PutAsync(
+            StoredRunArtifactFactory.CreateText(
+                viewModel.Run.RunId,
+                viewModel.Run.OutputDirectory,
+                outputPath,
+                "text/html; charset=utf-8",
+                content,
+                _timeProvider.GetUtcNow()),
             cancellationToken);
 
         return outputPath;
@@ -61,6 +83,7 @@ public sealed class HtmlRunViewWriter : IRunViewWriter
 
         AppendRunSection(html, viewModel.Run);
         AppendArtifactsSection(html, viewModel.Artifacts);
+        AppendPatternSection(html, viewModel.Pattern);
         AppendModeSection(html, viewModel.Mode);
         AppendPhasesSection(html, viewModel.Phases);
         AppendToolPolicySection(html, viewModel.ToolPolicyDecisions);
@@ -115,6 +138,81 @@ public sealed class HtmlRunViewWriter : IRunViewWriter
         html.AppendLine("    </section>");
     }
 
+    private static void AppendPatternSection(
+        StringBuilder html,
+        RunViewPattern pattern)
+    {
+        html.AppendLine("    <section>");
+        html.AppendLine("      <h2>Pattern</h2>");
+        html.Append("      <h3>")
+            .Append(Encode(pattern.Name))
+            .AppendLine("</h3>");
+        html.Append("      <p>")
+            .Append(pattern.Nodes.Count)
+            .Append(' ')
+            .Append(Encode(pattern.UnitName))
+            .Append(pattern.Nodes.Count == 1 ? string.Empty : "s")
+            .AppendLine(" executed in runtime-defined order.</p>");
+        html.Append("      <figure class=\"pattern-graph\" aria-label=\"")
+            .Append(Encode($"{pattern.Name} pattern graph"))
+            .AppendLine("\">");
+        html.AppendLine("        <div class=\"pattern-flow\" role=\"list\">");
+
+        for (var index = 0; index < pattern.Nodes.Count; index++)
+        {
+            var node = pattern.Nodes[index];
+            if (index > 0)
+            {
+                html.AppendLine("          <span class=\"flow-arrow\" aria-hidden=\"true\">&rarr;</span>");
+            }
+
+            html.Append("          <article class=\"pattern-node\" role=\"listitem\" id=\"")
+                .Append(Encode(node.Id))
+                .AppendLine("\">");
+            html.Append("            <p class=\"node-kind\">")
+                .Append(Encode(node.Kind))
+                .AppendLine("</p>");
+            html.Append("            <h4>")
+                .Append(Encode(node.Label))
+                .AppendLine("</h4>");
+            html.Append("            <p>")
+                .Append(Encode(node.Detail))
+                .AppendLine("</p>");
+            html.AppendLine("          </article>");
+        }
+
+        html.AppendLine("        </div>");
+        html.AppendLine("        <figcaption>Arrows show execution order. Directed relationships are listed below.</figcaption>");
+        html.AppendLine("      </figure>");
+        html.AppendLine("      <h3>Relationships</h3>");
+
+        if (pattern.Edges.Count == 0)
+        {
+            html.Append("      <p>This pattern has no relationships between ")
+                .Append(Encode(pattern.UnitName))
+                .AppendLine("s.</p>");
+        }
+        else
+        {
+            var nodesById = pattern.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
+            html.AppendLine("      <ul class=\"pattern-relations\">");
+            foreach (var edge in pattern.Edges)
+            {
+                html.Append("        <li><strong>")
+                    .Append(Encode(nodesById[edge.FromNodeId].Label))
+                    .Append("</strong> &rarr; <strong>")
+                    .Append(Encode(nodesById[edge.ToNodeId].Label))
+                    .Append("</strong>: ")
+                    .Append(Encode(edge.Label))
+                    .AppendLine("</li>");
+            }
+
+            html.AppendLine("      </ul>");
+        }
+
+        html.AppendLine("    </section>");
+    }
+
     private static void AppendModeSection(StringBuilder html, RunViewMode mode)
     {
         html.AppendLine("    <section>");
@@ -125,12 +223,14 @@ public sealed class HtmlRunViewWriter : IRunViewWriter
         html.Append("      <p>")
             .Append(Encode(mode.Description))
             .AppendLine("</p>");
-        html.AppendLine("      <h3>Configured phases</h3>");
+        html.Append("      <h3>")
+            .Append(Encode(mode.SequenceLabel))
+            .AppendLine("</h3>");
         html.AppendLine("      <ol>");
-        foreach (var phaseName in mode.PhaseNames)
+        foreach (var sequenceName in mode.SequenceNames)
         {
             html.Append("        <li>")
-                .Append(Encode(phaseName))
+                .Append(Encode(sequenceName))
                 .AppendLine("</li>");
         }
 
@@ -297,12 +397,24 @@ public sealed class HtmlRunViewWriter : IRunViewWriter
         .pass { color: #0b6b3a; background: #d9fbe8; }
         .fail { color: #9b1c1c; background: #fee2e2; }
         .facts { margin: 0; }
-        .facts > div, article dl > div { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 16px; padding: 8px 0; border-bottom: 1px solid #edf2f7; }
+        .facts > div, article dl > div { display: grid; gap: 16px; padding: 8px 0; border-bottom: 1px solid #edf2f7; }
+        .facts > div { grid-template-columns: minmax(140px, 220px) 1fr; }
+        article dl > div { grid-template-columns: minmax(0, 1fr) minmax(100px, 1fr); }
         dt { color: #52616b; font-weight: 700; }
         dd { margin: 0; overflow-wrap: anywhere; }
         a { color: #0b69a3; }
         .links, .checks { padding-left: 22px; }
         .links li, .checks li { margin: 8px 0; }
+        .pattern-graph { margin: 20px 0; }
+        .pattern-flow { display: flex; align-items: stretch; gap: 12px; overflow-x: auto; padding: 4px 2px 12px; }
+        .pattern-node { flex: 1 0 210px; max-width: 300px; border: 2px solid #829ab1; border-radius: 10px; padding: 16px; background: #f8fbfd; }
+        .pattern-node h4 { margin: 4px 0 8px; color: #102a43; font-size: 1.05rem; }
+        .pattern-node p { margin: 0; }
+        .node-kind { color: #486581; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+        .flow-arrow { align-self: center; color: #486581; font-size: 1.75rem; font-weight: 800; }
+        figcaption { color: #52616b; font-size: 0.9rem; }
+        .pattern-relations { padding-left: 22px; }
+        .pattern-relations li { margin: 8px 0; }
         .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
         .card { border: 1px solid #d9e2ec; border-radius: 10px; padding: 18px; }
         .card h3 { margin-top: 0; }
@@ -315,6 +427,9 @@ public sealed class HtmlRunViewWriter : IRunViewWriter
           main { width: min(100% - 20px, 1100px); margin-top: 10px; }
           .hero, section { padding: 18px; }
           .facts > div, article dl > div { grid-template-columns: 1fr; gap: 2px; }
+          .pattern-flow { flex-direction: column; }
+          .pattern-node { flex-basis: auto; max-width: none; }
+          .flow-arrow { transform: rotate(90deg); }
         }
         """;
 }

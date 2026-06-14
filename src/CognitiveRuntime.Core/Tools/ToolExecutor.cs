@@ -20,7 +20,7 @@ public sealed class ToolExecutor : IToolExecutor
     {
         var decision = _policy.Evaluate(request);
         await trace.EmitAsync(
-            "tool.policy_evaluated",
+            TraceEventNames.ToolPolicyEvaluated,
             new Dictionary<string, object?>
             {
                 ["provider"] = provider.ProviderName,
@@ -38,7 +38,7 @@ public sealed class ToolExecutor : IToolExecutor
         }
 
         await trace.EmitAsync(
-            "tool.called",
+            TraceEventNames.ToolCalled,
             new Dictionary<string, object?>
             {
                 ["provider"] = provider.ProviderName,
@@ -50,7 +50,7 @@ public sealed class ToolExecutor : IToolExecutor
         var result = await provider.ExecuteAsync(request, cancellationToken);
 
         await trace.EmitAsync(
-            "tool.completed",
+            TraceEventNames.ToolCompleted,
             new Dictionary<string, object?>
             {
                 ["provider"] = provider.ProviderName,

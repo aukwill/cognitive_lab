@@ -23,6 +23,29 @@ public sealed class ArtifactWriterTests
     }
 
     [Fact]
+    public async Task PrepareRunAsync_RejectsExistingRunDirectory()
+    {
+        using var workspace = new TestWorkspace();
+        var writer = new ArtifactWriter(
+            new FixedTimeProvider(
+                new DateTimeOffset(2026, 6, 13, 12, 34, 56, TimeSpan.Zero)));
+
+        var first = await writer.PrepareRunAsync(
+            workspace.OutputRoot,
+            "frame",
+            "run-001");
+
+        var exception = await Assert.ThrowsAsync<IOException>(
+            () => writer.PrepareRunAsync(
+                workspace.OutputRoot,
+                "frame",
+                "run-001"));
+
+        Assert.Contains(first.RunDirectory, exception.Message);
+        Assert.Contains("already exists", exception.Message);
+    }
+
+    [Fact]
     public async Task WriteAsync_RejectsPathOutsideRunDirectory()
     {
         using var workspace = new TestWorkspace();

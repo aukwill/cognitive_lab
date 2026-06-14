@@ -45,7 +45,8 @@ public enum ArtifactKind
     Result,
     RunSummary,
     EvalReport,
-    Pattern
+    Pattern,
+    RunManifest
 }
 
 public sealed record RunArtifactPaths(
@@ -57,6 +58,12 @@ public sealed record RunArtifactPaths(
     string EvalReportPath,
     string PatternPath)
 {
+    public string RunId { get; init; } = string.Empty;
+
+    public string RootDirectory { get; init; } = RunDirectory;
+
+    public string RunManifestPath => Path.Combine(RunDirectory, "run.json");
+
     public string GetPath(ArtifactKind kind) => kind switch
     {
         ArtifactKind.Input => InputPath,
@@ -64,6 +71,7 @@ public sealed record RunArtifactPaths(
         ArtifactKind.RunSummary => RunSummaryPath,
         ArtifactKind.EvalReport => EvalReportPath,
         ArtifactKind.Pattern => PatternPath,
+        ArtifactKind.RunManifest => RunManifestPath,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 

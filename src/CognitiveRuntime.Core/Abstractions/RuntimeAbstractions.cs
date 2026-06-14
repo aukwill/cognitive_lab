@@ -1,4 +1,5 @@
 using CognitiveRuntime.Core.Contracts;
+using CognitiveRuntime.Core.Persistence;
 using CognitiveRuntime.Core.Views;
 
 namespace CognitiveRuntime.Core.Abstractions;
@@ -23,6 +24,11 @@ public interface IModelClient
 public interface IModelClientFactory
 {
     IModelClient Resolve(string providerName);
+}
+
+public interface IRunIdGenerator
+{
+    string GenerateRunId();
 }
 
 public interface IToolProvider
@@ -95,5 +101,50 @@ public interface IRunViewWriter
 {
     Task<string> WriteAsync(
         RunViewModel viewModel,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IRunStateStore
+{
+    Task UpsertRunAsync(
+        RunCatalogEntry entry,
+        CancellationToken cancellationToken = default);
+
+    Task<RunCatalogEntry?> GetRunAsync(
+        string runId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<RunCatalogEntry>> ListRunsAsync(
+        CancellationToken cancellationToken = default);
+}
+
+public interface IArtifactStore
+{
+    Task PutAsync(
+        StoredRunArtifact artifact,
+        CancellationToken cancellationToken = default);
+
+    Task<StoredRunArtifact?> GetAsync(
+        string runId,
+        string relativePath,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<StoredRunArtifactDescriptor>> ListAsync(
+        string runId,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ISemanticIndex
+{
+    Task UpsertAsync(
+        IReadOnlyList<SemanticIndexDocument> documents,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SemanticSearchMatch>> SearchAsync(
+        SemanticSearchQuery query,
+        CancellationToken cancellationToken = default);
+
+    Task DeleteRunAsync(
+        string runId,
         CancellationToken cancellationToken = default);
 }

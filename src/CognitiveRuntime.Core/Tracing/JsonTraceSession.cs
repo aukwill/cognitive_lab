@@ -2,16 +2,21 @@ using System.Text.Json;
 using CognitiveRuntime.Core.Abstractions;
 using CognitiveRuntime.Core.Contracts;
 using CognitiveRuntime.Core.IO;
+using CognitiveRuntime.Core.Persistence;
 
 namespace CognitiveRuntime.Core.Tracing;
 
 public sealed class JsonTraceSessionFactory : ITraceSessionFactory
 {
     private readonly TimeProvider _timeProvider;
+    private readonly IArtifactStore _artifactStore;
 
-    public JsonTraceSessionFactory(TimeProvider timeProvider)
+    public JsonTraceSessionFactory(
+        TimeProvider timeProvider,
+        IArtifactStore? artifactStore = null)
     {
         _timeProvider = timeProvider;
+        _artifactStore = artifactStore ?? new NullArtifactStore();
     }
 
     public async Task<ITraceSession> CreateAsync(
@@ -19,7 +24,11 @@ public sealed class JsonTraceSessionFactory : ITraceSessionFactory
         string tracePath,
         CancellationToken cancellationToken = default)
     {
-        var session = new JsonTraceSession(runId, tracePath, _timeProvider);
+        var session = new JsonTraceSession(
+            runId,
+            tracePath,
+            _timeProvider,
+            _artifactStore);
         await session.InitializeAsync(cancellationToken);
         return session;
     }
@@ -36,15 +45,18 @@ internal sealed class JsonTraceSession : ITraceSession
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly string _runId;
     private readonly TimeProvider _timeProvider;
+    private readonly IArtifactStore _artifactStore;
 
     public JsonTraceSession(
         string runId,
         string tracePath,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IArtifactStore artifactStore)
     {
         _runId = runId;
         FilePath = Path.GetFullPath(tracePath);
         _timeProvider = timeProvider;
+        _artifactStore = artifactStore;
     }
 
     public string FilePath { get; }
@@ -75,8 +87,20 @@ internal sealed class JsonTraceSession : ITraceSession
         {
             lock (_events)
             {
+                var terminalEvent = _events.FirstOrDefault(
+                    traceEvent => TraceEventNames.IsTerminal(traceEvent.Type));
+                if (terminalEvent is not null)
+                {
+                    throw new InvalidOperationException(
+                        $"Trace '{_runId}' is already terminal at sequence " +
+                        $"'{terminalEvent.Sequence}' with event " +
+                        $"'{terminalEvent.Type}'.");
+                }
+
+                var sequence = _events.Count + 1L;
                 _events.Add(
                     new TraceEvent(
+                        sequence,
                         _timeProvider.GetUtcNow(),
                         eventType,
                         _runId,
@@ -99,11 +123,25 @@ internal sealed class JsonTraceSession : ITraceSession
             snapshot = [.. _events];
         }
 
-        var document = new TraceDocument(_runId, snapshot);
+        var document = new TraceDocument(
+            TraceSchema.CurrentVersion,
+            _runId,
+            snapshot);
         var json = JsonSerializer.Serialize(document, JsonOptions);
         await FilePersistence.WriteAllTextAtomicAsync(
             FilePath,
             json,
+            cancellationToken);
+        await _artifactStore.PutAsync(
+            StoredRunArtifactFactory.CreateText(
+                _runId,
+                Path.GetDirectoryName(FilePath)
+                    ?? throw new InvalidOperationException(
+                        $"Trace path '{FilePath}' has no parent directory."),
+                FilePath,
+                "application/json; charset=utf-8",
+                json,
+                _timeProvider.GetUtcNow()),
             cancellationToken);
     }
 }

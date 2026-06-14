@@ -5,6 +5,7 @@ using CognitiveRuntime.Core.Evaluation;
 using CognitiveRuntime.Core.Exceptions;
 using CognitiveRuntime.Core.Models;
 using CognitiveRuntime.Core.Modes;
+using CognitiveRuntime.Core.Persistence;
 using CognitiveRuntime.Core.Runtime;
 using CognitiveRuntime.Core.Runtime.Orchestration;
 using CognitiveRuntime.Core.Tools;
@@ -146,6 +147,7 @@ internal sealed class CliApplication
                 }));
 
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IRunIdGenerator, GuidRunIdGenerator>();
         services.AddSingleton<HttpClient>(
             _ => new HttpClient
             {
@@ -168,9 +170,25 @@ internal sealed class CliApplication
                 configuration["AZURE_FOUNDRY_API_KEY"],
                 configuration["AZURE_FOUNDRY_DEPLOYMENT"],
                 configuration["AZURE_FOUNDRY_API_VERSION"]));
+        services.AddSingleton(
+            new OpenRouterOptions(
+                configuration["OPENROUTER_ENDPOINT"]
+                    ?? "https://openrouter.ai/api/v1",
+                configuration["OPENROUTER_API_KEY"],
+                configuration["OPENROUTER_MODEL"],
+                bool.TryParse(
+                    configuration["OPENROUTER_ENABLE_CODE_EXECUTION"],
+                    out var enableCodeExecution) && enableCodeExecution));
 
         services.AddSingleton<IModeLoader>(
             _ => new FileModeLoader(options.ModesRoot));
+        services.AddSingleton<IRunStateStore>(
+            _ => DatabaseRunStateStoreFactory.Create(configuration));
+        services.AddSingleton<IArtifactStore>(
+            _ => ArtifactStoreFactory.Create(
+                options.OutputRoot,
+                configuration));
+        services.AddSingleton<ISemanticIndex, NullSemanticIndex>();
         services.AddSingleton<IArtifactWriter, ArtifactWriter>();
         services.AddSingleton<IRunViewWriter, HtmlRunViewWriter>();
         services.AddSingleton<ITraceSessionFactory, JsonTraceSessionFactory>();
@@ -178,8 +196,11 @@ internal sealed class CliApplication
         services.AddSingleton<LoopEfficacyEvaluator>();
         services.AddSingleton<IEvalRunner, EvalRunner>();
         services.AddSingleton<PhaseRunner>();
+        services.AddSingleton<PatternExecutionPlanValidator>();
+        services.AddSingleton<PatternExecutor>();
         services.AddSingleton<IOrchestrationPattern, CriticRevisionPattern>();
         services.AddSingleton<IOrchestrationPattern, SinglePassPattern>();
+        services.AddSingleton<IOrchestrationPattern, LinearPipelinePattern>();
         services.AddSingleton<IOrchestrationPatternFactory, OrchestrationPatternFactory>();
 
         services.AddSingleton<IModelClient, MockModelClient>();
@@ -189,7 +210,12 @@ internal sealed class CliApplication
                 provider.GetRequiredService<GitHubModelsOptions>()));
         services.AddSingleton<IModelClient>(
             provider => new AzureFoundryModelClient(
+                provider.GetRequiredService<HttpClient>(),
                 provider.GetRequiredService<AzureFoundryOptions>()));
+        services.AddSingleton<IModelClient>(
+            provider => new OpenRouterModelClient(
+                provider.GetRequiredService<HttpClient>(),
+                provider.GetRequiredService<OpenRouterOptions>()));
         services.AddSingleton<IModelClientFactory, ModelClientFactory>();
 
         services.AddSingleton(new ToolPolicy(Array.Empty<string>()));
@@ -216,7 +242,8 @@ internal sealed class CliApplication
         writer.WriteLine("  --mode <name>             Mode directory name.");
         writer.WriteLine("  --input <path>            Input text file.");
         writer.WriteLine(
-            "  --run-mode <provider>     mock, github-models, or azure-foundry.");
+            "  --run-mode <provider>     mock, github-models, openrouter, " +
+            "or azure-foundry.");
         writer.WriteLine("  --modes-root <path>       Defaults to ./modes.");
         writer.WriteLine("  --output-root <path>      Defaults to ./outputs.");
         writer.WriteLine("  --html                    Write read-only index.html.");

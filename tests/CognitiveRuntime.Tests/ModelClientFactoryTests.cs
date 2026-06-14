@@ -12,6 +12,7 @@ public sealed class ModelClientFactoryTests
     [InlineData("github", "github-models")]
     [InlineData("github-models", "github-models")]
     [InlineData("azure", "azure-foundry")]
+    [InlineData("openrouter", "openrouter")]
     public void Resolve_UsesCanonicalProviderAliases(
         string requested,
         string expected)
@@ -20,7 +21,8 @@ public sealed class ModelClientFactoryTests
             [
                 new StubModelClient("mock"),
                 new StubModelClient("github-models"),
-                new StubModelClient("azure-foundry")
+                new StubModelClient("azure-foundry"),
+                new StubModelClient("openrouter")
             ]);
 
         var client = factory.Resolve(requested);

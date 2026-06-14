@@ -5,6 +5,7 @@ namespace CognitiveRuntime.Core.Views;
 public sealed record RunViewModel(
     RunViewRun Run,
     IReadOnlyList<RunViewArtifact> Artifacts,
+    RunViewPattern Pattern,
     RunViewMode Mode,
     IReadOnlyList<RunViewPhase> Phases,
     IReadOnlyList<RunViewToolPolicyDecision> ToolPolicyDecisions,
@@ -23,10 +24,28 @@ public sealed record RunViewRun(
 
 public sealed record RunViewArtifact(string Name, string RelativePath);
 
+public sealed record RunViewPattern(
+    string Name,
+    string UnitName,
+    IReadOnlyList<RunViewPatternNode> Nodes,
+    IReadOnlyList<RunViewPatternEdge> Edges);
+
+public sealed record RunViewPatternNode(
+    string Id,
+    string Label,
+    string Kind,
+    string Detail);
+
+public sealed record RunViewPatternEdge(
+    string FromNodeId,
+    string ToNodeId,
+    string Label);
+
 public sealed record RunViewMode(
     string Name,
     string Description,
-    IReadOnlyList<string> PhaseNames,
+    string SequenceLabel,
+    IReadOnlyList<string> SequenceNames,
     string CompletionRule);
 
 public sealed record RunViewPhase(

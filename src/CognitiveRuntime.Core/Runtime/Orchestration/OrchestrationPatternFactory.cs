@@ -7,10 +7,7 @@ public interface IOrchestrationPatternFactory
 
 /// <summary>
 /// Resolves an <see cref="IOrchestrationPattern"/> by its declared
-/// <see cref="IOrchestrationPattern.Name"/>. <c>linear-pipeline</c> is not
-/// registered here: <see cref="LinearPipelinePattern"/> is not an
-/// <see cref="IOrchestrationPattern"/> and is run directly by the
-/// orchestrator.
+/// <see cref="IOrchestrationPattern.Name"/>.
 /// </summary>
 public sealed class OrchestrationPatternFactory : IOrchestrationPatternFactory
 {

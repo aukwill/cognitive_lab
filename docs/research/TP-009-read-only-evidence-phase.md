@@ -62,6 +62,12 @@ runtime retry policy explicitly permits it.
 The exact API should be adjusted when immutable run state exists, but the
 minimum shape is:
 
+This note predates `CF-001`. Implementation must use the canonical vocabulary
+from `ADR-001`: a tool result is first recorded as an `Observation`, then the
+runtime may admit it as `Evidence` for a declared purpose. The preliminary
+`EvidenceItem` shape below is retained as research history, not as a competing
+evidence contract.
+
 ```csharp
 public sealed record EvidencePlan(
     IReadOnlyList<EvidenceRequest> Requests);

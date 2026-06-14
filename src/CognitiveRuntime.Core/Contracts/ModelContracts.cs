@@ -25,3 +25,9 @@ public sealed record AzureFoundryOptions(
     string? ApiKey,
     string? Deployment,
     string? ApiVersion);
+
+public sealed record OpenRouterOptions(
+    string Endpoint,
+    string? ApiKey,
+    string? Model,
+    bool EnableCodeExecution = false);

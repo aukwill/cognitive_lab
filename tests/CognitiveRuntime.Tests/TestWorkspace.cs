@@ -110,7 +110,7 @@ internal sealed class TestWorkspace : IDisposable
 
 internal sealed class FixedTimeProvider : TimeProvider
 {
-    private readonly DateTimeOffset _utcNow;
+    private DateTimeOffset _utcNow;
 
     public FixedTimeProvider(DateTimeOffset utcNow)
     {
@@ -118,4 +118,14 @@ internal sealed class FixedTimeProvider : TimeProvider
     }
 
     public override DateTimeOffset GetUtcNow() => _utcNow;
+
+    public void Advance(TimeSpan duration)
+    {
+        if (duration < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(duration));
+        }
+
+        _utcNow += duration;
+    }
 }
