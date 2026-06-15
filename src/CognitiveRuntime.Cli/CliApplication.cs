@@ -3,6 +3,7 @@ using CognitiveRuntime.Core.Artifacts;
 using CognitiveRuntime.Core.Contracts;
 using CognitiveRuntime.Core.Evaluation;
 using CognitiveRuntime.Core.Exceptions;
+using CognitiveRuntime.Core.Experiments.Dungeons;
 using CognitiveRuntime.Core.Models;
 using CognitiveRuntime.Core.Modes;
 using CognitiveRuntime.Core.Persistence;
@@ -19,13 +20,16 @@ namespace CognitiveRuntime.Cli;
 internal sealed class CliApplication
 {
     private readonly Orchestrator _orchestrator;
+    private readonly DungeonExperimentRunner _dungeonExperimentRunner;
     private readonly ILogger<CliApplication> _logger;
 
     public CliApplication(
         Orchestrator orchestrator,
+        DungeonExperimentRunner dungeonExperimentRunner,
         ILogger<CliApplication> logger)
     {
         _orchestrator = orchestrator;
+        _dungeonExperimentRunner = dungeonExperimentRunner;
         _logger = logger;
     }
 
@@ -56,7 +60,7 @@ internal sealed class CliApplication
             return ExitCodes.Success;
         }
 
-        if (!File.Exists(options.InputPath))
+        if (options.Experiment is null && !File.Exists(options.InputPath))
         {
             Console.Error.WriteLine(
                 $"Input file '{options.InputPath}' does not exist.");
@@ -69,6 +73,13 @@ internal sealed class CliApplication
 
         try
         {
+            if (options.Experiment is not null)
+            {
+                return await application.ExecuteExperimentAsync(
+                    options,
+                    cancellationToken);
+            }
+
             var input = await File.ReadAllTextAsync(
                 options.InputPath,
                 cancellationToken);
@@ -129,6 +140,45 @@ internal sealed class CliApplication
         }
 
         return ExitCodes.FromOutcome(result.Outcome);
+    }
+
+    private async Task<int> ExecuteExperimentAsync(
+        CliOptions options,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "Running experiment {Experiment} with provider {Provider}.",
+            options.Experiment,
+            options.ModelProvider);
+
+        var result = await _dungeonExperimentRunner.RunAsync(
+            new DungeonExperimentRequest(
+                options.Brief ?? CliOptions.DungeonBuilderBrief,
+                options.ModelProvider,
+                options.OutputRoot,
+                options.ExperimentsRoot,
+                InputSource: null,
+                FlareGameRoot: options.FlareGameRoot),
+            cancellationToken);
+
+        Console.WriteLine($"Run ID: {result.Run.RunId}");
+        Console.WriteLine($"Output: {result.Run.OutputDirectory}");
+        Console.WriteLine(
+            $"Evaluation: {(result.Run.Outcome == RunOutcome.Success ? "PASS" : "FAIL")}");
+        Console.WriteLine(
+            result.WinnerIndex is null
+                ? "Winner: none"
+                : $"Winner: candidate {result.WinnerIndex:D2}");
+        if (result.TmxPath is not null)
+        {
+            Console.WriteLine($"TMX: {result.TmxPath}");
+        }
+        if (result.FlareModPath is not null)
+        {
+            Console.WriteLine($"Flare mod: {result.FlareModPath}");
+        }
+
+        return ExitCodes.FromOutcome(result.Run.Outcome);
     }
 
     private static ServiceCollection BuildServices(
@@ -223,6 +273,12 @@ internal sealed class CliApplication
         services.AddSingleton<IToolProvider, MockToolProvider>();
         services.AddSingleton<IToolProvider, McpToolProvider>();
 
+        services.AddSingleton<DungeonArtifactWriter>();
+        services.AddSingleton<DungeonExperimentDefinitionLoader>();
+        services.AddSingleton<DungeonPlanVerifier>();
+        services.AddSingleton<DungeonCompiler>();
+        services.AddSingleton<DungeonExperimentRunner>();
+
         services.AddSingleton<Orchestrator>();
         services.AddSingleton<CliApplication>();
 
@@ -255,6 +311,16 @@ internal sealed class CliApplication
             "critic-revision (default), or linear-pipeline.");
         writer.WriteLine(
             "  --pipeline <mode,mode,..> Stage modes for --pattern linear-pipeline.");
+        writer.WriteLine(
+            "  --experiment <name>       Run a bounded experiment instead of a " +
+            "mode (e.g. dungeon-builder).");
+        writer.WriteLine(
+            "  --experiments-root <path> Defaults to ./experiments.");
+        writer.WriteLine(
+            "  --brief <text>            Overrides the experiment brief.");
+        writer.WriteLine(
+            "  --flare-game-root <path>  Optional local Flare game-data " +
+            "checkout to copy tilesheets from.");
         writer.WriteLine("  --help                    Show this help.");
     }
 }

@@ -1,5 +1,6 @@
 using CognitiveRuntime.Core.Abstractions;
 using CognitiveRuntime.Core.Contracts;
+using CognitiveRuntime.Core.Experiments.Dungeons;
 
 namespace CognitiveRuntime.Core.Models;
 
@@ -34,6 +35,7 @@ public sealed class MockModelClient : IModelClient
 
         return request.ModeName.ToLowerInvariant() switch
         {
+            "dungeon-builder" => CreateDungeonProposal(),
             "frame" => $"""
                 ## Problem
 
@@ -174,6 +176,14 @@ public sealed class MockModelClient : IModelClient
 
     private static string CreateRevisionResponse(ModelRequest request)
     {
+        if (string.Equals(
+                request.ModeName,
+                "dungeon-builder",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return CreateDungeonRevision();
+        }
+
         var mainResult = GetPriorResult(request, PhaseKind.Main);
         var criticResult = GetPriorResult(request, PhaseKind.Critic);
         var inputSummary = Summarize(request.Input);
@@ -279,6 +289,66 @@ public sealed class MockModelClient : IModelClient
         ?? throw new InvalidOperationException(
             $"Mock {request.PhaseKind.ToString().ToLowerInvariant()} phase " +
             $"requires a prior {phaseKind.ToString().ToLowerInvariant()} result.");
+
+    private static string CreateDungeonProposal() =>
+        DungeonJson.Serialize(new DungeonPlan(
+            SchemaVersion: 1,
+            Title: "Mock Proposed Crypt",
+            Width: 16,
+            Height: 12,
+            Rooms:
+            [
+                new DungeonRoom("entrance", 1, 3, 3, 3),
+                new DungeonRoom("hall", 6, 3, 3, 3),
+                new DungeonRoom("sanctum", 11, 3, 3, 3)
+            ],
+            Corridors:
+            [
+                new DungeonCorridor("corridor-entrance-hall", "entrance", "hall", 1),
+                new DungeonCorridor("corridor-hall-sanctum", "hall", "sanctum", 1)
+            ],
+            Doors: [],
+            Markers:
+            [
+                new DungeonMarker(DungeonMarkerKind.Entrance, "entrance"),
+                new DungeonMarker(DungeonMarkerKind.Objective, "sanctum"),
+                new DungeonMarker(DungeonMarkerKind.Exit, "entrance")
+            ]));
+
+    private static string CreateDungeonRevision() =>
+        DungeonJson.Serialize(new DungeonPlan(
+            SchemaVersion: 1,
+            Title: "Mock Revised Crypt",
+            Width: 34,
+            Height: 14,
+            Rooms:
+            [
+                new DungeonRoom("entrance", 1, 5, 3, 3),
+                new DungeonRoom("hall", 6, 5, 4, 3),
+                new DungeonRoom("crossing", 12, 4, 3, 4),
+                new DungeonRoom("annex", 17, 5, 5, 3),
+                new DungeonRoom("sanctum", 24, 5, 3, 3),
+                new DungeonRoom("vault", 12, 9, 4, 4)
+            ],
+            Corridors:
+            [
+                new DungeonCorridor("corridor-entrance-hall", "entrance", "hall", 2),
+                new DungeonCorridor("corridor-hall-crossing", "hall", "crossing", 2),
+                new DungeonCorridor("corridor-crossing-annex", "crossing", "annex", 2),
+                new DungeonCorridor("corridor-annex-sanctum", "annex", "sanctum", 2),
+                new DungeonCorridor("corridor-crossing-vault", "crossing", "vault", 2),
+                new DungeonCorridor("corridor-vault-sanctum", "vault", "sanctum", 2)
+            ],
+            Doors:
+            [
+                new DungeonDoor("door-sanctum", "annex", "sanctum", DungeonDoorKind.Guarded)
+            ],
+            Markers:
+            [
+                new DungeonMarker(DungeonMarkerKind.Entrance, "entrance"),
+                new DungeonMarker(DungeonMarkerKind.Objective, "sanctum"),
+                new DungeonMarker(DungeonMarkerKind.Exit, "entrance")
+            ]));
 
     private static string Summarize(string input)
     {

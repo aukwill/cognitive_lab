@@ -12,10 +12,23 @@ internal sealed record CliOptions(
     bool ShowHelp,
     string? Lens = null,
     string Pattern = "critic-revision",
-    IReadOnlyList<string>? PipelineStages = null)
+    IReadOnlyList<string>? PipelineStages = null,
+    string? Experiment = null,
+    string ExperimentsRoot = "",
+    string? Brief = null,
+    string? FlareGameRoot = null)
 {
+    public const string DungeonBuilderBrief =
+        "Build a compact crypt with an entrance, three to six rooms, one " +
+        "optional branch, one locked or guarded objective room, and a " +
+        "reachable exit.";
+
     private static readonly HashSet<string> KnownPatterns = new(
         ["single-pass", "critic-revision", "linear-pipeline"],
+        StringComparer.OrdinalIgnoreCase);
+
+    private static readonly HashSet<string> KnownExperiments = new(
+        ["dungeon-builder"],
         StringComparer.OrdinalIgnoreCase);
 
     public static CliOptions Parse(
@@ -65,6 +78,46 @@ internal sealed record CliOptions(
         EnsureKnownOptions(values.Keys);
 
         var currentDirectory = Environment.CurrentDirectory;
+
+        if (values.TryGetValue("--experiment", out var experiment))
+        {
+            if (!KnownExperiments.Contains(experiment))
+            {
+                var available = string.Join(", ", KnownExperiments.Order());
+                throw new CliUsageException(
+                    $"Unknown experiment '{experiment}'. Available experiments: {available}.");
+            }
+
+            var experimentProvider = GetValue(values, "--run-mode", "--model-provider")
+                ?? configuration["MODEL_PROVIDER"]
+                ?? "mock";
+            var experimentsRoot = Path.GetFullPath(
+                values.GetValueOrDefault("--experiments-root")
+                ?? Path.Combine(currentDirectory, "experiments"));
+            var experimentOutputRoot = Path.GetFullPath(
+                values.GetValueOrDefault("--output-root")
+                ?? Path.Combine(currentDirectory, "outputs"));
+            var brief = values.GetValueOrDefault("--brief");
+            var flareGameRoot = values.GetValueOrDefault("--flare-game-root");
+
+            return new CliOptions(
+                Mode: string.Empty,
+                InputPath: string.Empty,
+                ModelProvider: experimentProvider,
+                ModesRoot: Path.GetFullPath(
+                    values.GetValueOrDefault("--modes-root")
+                    ?? Path.Combine(currentDirectory, "modes")),
+                OutputRoot: experimentOutputRoot,
+                WriteHtmlView: false,
+                ShowHelp: false,
+                Experiment: experiment,
+                ExperimentsRoot: experimentsRoot,
+                Brief: string.IsNullOrWhiteSpace(brief) ? null : brief,
+                FlareGameRoot: string.IsNullOrWhiteSpace(flareGameRoot)
+                    ? null
+                    : Path.GetFullPath(flareGameRoot));
+        }
+
         var pattern = values.GetValueOrDefault("--pattern") ?? "critic-revision";
         if (!KnownPatterns.Contains(pattern))
         {
@@ -156,7 +209,11 @@ internal sealed record CliOptions(
                 "--html",
                 "--lens",
                 "--pattern",
-                "--pipeline"
+                "--pipeline",
+                "--experiment",
+                "--experiments-root",
+                "--brief",
+                "--flare-game-root"
             ],
             StringComparer.OrdinalIgnoreCase);
 
