@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using CognitiveRuntime.Core.Contracts;
 
 namespace CognitiveRuntime.Core.Experiments.Dungeons;
@@ -34,7 +33,9 @@ public sealed record DungeonCorridor(
     string ToRoomId,
     int Width);
 
-[JsonConverter(typeof(JsonStringEnumConverter<DungeonDoorKind>))]
+// Enum string casing comes from DungeonJson.Options (camelCase). A type-level
+// converter would override that policy with PascalCase and contradict the
+// lowercase values the prompts instruct the model to emit.
 public enum DungeonDoorKind
 {
     Open,
@@ -48,7 +49,6 @@ public sealed record DungeonDoor(
     string RoomBId,
     DungeonDoorKind Kind);
 
-[JsonConverter(typeof(JsonStringEnumConverter<DungeonMarkerKind>))]
 public enum DungeonMarkerKind
 {
     Entrance,

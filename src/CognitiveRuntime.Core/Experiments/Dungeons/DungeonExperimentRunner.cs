@@ -119,7 +119,7 @@ public sealed class DungeonExperimentRunner
                 .FirstOrDefault();
 
             await trace.EmitAsync(
-                "selection.completed",
+                DungeonTraceEventNames.SelectionCompleted,
                 new Dictionary<string, object?>
                 {
                     ["winnerIndex"] = winner?.Index,
@@ -370,7 +370,7 @@ public sealed class DungeonExperimentRunner
             "candidates",
             index.ToString("D2"));
         await trace.EmitAsync(
-            "candidate.started",
+            DungeonTraceEventNames.CandidateStarted,
             new Dictionary<string, object?>
             {
                 ["candidateId"] = candidateId,
@@ -463,7 +463,7 @@ public sealed class DungeonExperimentRunner
             cancellationToken);
 
         await trace.EmitAsync(
-            "candidate.completed",
+            DungeonTraceEventNames.CandidateCompleted,
             new Dictionary<string, object?>
             {
                 ["candidateId"] = candidateId,
@@ -605,7 +605,7 @@ public sealed class DungeonExperimentRunner
         DungeonVerificationReport report,
         CancellationToken cancellationToken) =>
         trace.EmitAsync(
-            "verifier.completed",
+            DungeonTraceEventNames.VerifierCompleted,
             new Dictionary<string, object?>
             {
                 ["candidateId"] = candidateId,
@@ -765,7 +765,10 @@ public sealed class DungeonExperimentRunner
             winnerIndex = winner?.Index,
             winnerScore = winner?.Revised.Report.Score,
             evalPassed = evalReport.Passed,
-            flareAssetsCopied = request.FlareGameRoot is not null
+            flareAssetsCopied = request.FlareGameRoot is not null,
+            // SHA-256 and byte length per artifact (TA-007), so the experiment
+            // run.json carries the same integrity inventory as the core path.
+            artifacts = RunManifestFactory.CreateArtifactInventory(artifacts)
         };
         await WriteStandardArtifactAsync(
             artifacts,

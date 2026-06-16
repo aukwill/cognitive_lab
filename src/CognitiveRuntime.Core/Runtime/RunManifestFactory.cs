@@ -142,9 +142,11 @@ internal static class RunManifestFactory
         return JsonSerializer.Serialize(manifest, JsonOptions);
     }
 
-    private static IReadOnlyList<RunManifestArtifact> CreateArtifactInventory(
+    // Exposed so alternative run.json producers (for example the dungeon
+    // experiment) record the same SHA-256 and byte-length integrity inventory.
+    internal static IReadOnlyList<RunManifestArtifact> CreateArtifactInventory(
         RunArtifactPaths artifacts,
-        string? htmlViewPath)
+        string? htmlViewPath = null)
     {
         var paths = Directory
             .EnumerateFiles(
@@ -160,6 +162,16 @@ internal static class RunManifestFactory
             paths = paths.Append(htmlViewPath);
         }
 
+        // run.json and trace.json are not in their final state when the manifest
+        // is built: the manifest cannot hash itself, and the terminal trace event
+        // is appended after run.json is written. Recording their integrity as
+        // unknown avoids a hash that will never match the final bytes on disk.
+        var nonFinalPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            Path.GetFullPath(artifacts.RunManifestPath),
+            Path.GetFullPath(artifacts.TracePath)
+        };
+
         return paths
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -171,7 +183,9 @@ internal static class RunManifestFactory
                 var relativePath = Path
                     .GetRelativePath(artifacts.RunDirectory, path)
                     .Replace('\\', '/');
-                var (byteLength, sha256) = ComputeIntegrity(path);
+                var (byteLength, sha256) = nonFinalPaths.Contains(path)
+                    ? ((long?)null, (string?)null)
+                    : ComputeIntegrity(path);
                 return new RunManifestArtifact(
                     relativePath,
                     GetArtifactKind(relativePath),

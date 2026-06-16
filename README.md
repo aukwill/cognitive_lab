@@ -256,10 +256,13 @@ outcome, the resolved pattern plan, execution-node and stage outcomes,
 relative artifact inventory, eval summary, and sanitized failure information
 when applicable. Each artifact in the inventory records its SHA-256 hash and
 byte length, computed from the final bytes on disk, so a verifier can detect a
-modified or truncated file. The manifest is written last and cannot hash
-itself, so `run.json` records its own integrity as unknown rather than a
-guessed value. Serialization is deterministic for a fixed run, and the
-manifest contains no credentials or provider request bodies.
+modified or truncated file. `run.json` and `trace.json` are still being written
+at manifest time (the manifest cannot hash itself, and the terminal trace event
+is appended after `run.json`), so both record their own integrity as unknown
+rather than a value that will never match the final bytes. The same integrity
+inventory is recorded by the dungeon experiment's `run.json`. Serialization is
+deterministic for a fixed run, and the manifest contains no credentials or
+provider request bodies.
 
 The shared executor also emits stable `node.started` and terminal
 `node.completed`, `node.failed`, or `node.cancelled` events. Deterministic
