@@ -132,6 +132,7 @@ internal static class RunManifestFactory
             nodes,
             stages,
             CreateArtifactInventory(state.Artifacts, htmlViewPath),
+            state.ArtifactLedger,
             eval,
             failure);
     }

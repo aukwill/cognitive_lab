@@ -11,6 +11,7 @@ public sealed record RunState(
     RunLifecycleStatus LifecycleStatus,
     ImmutableDictionary<string, LoadedMode> LoadedModes,
     ImmutableArray<ExecutionNodeState> ExecutionNodes,
+    ImmutableArray<RunArtifactState> ArtifactLedger,
     PatternExecutionResult? Execution = null,
     EvalReport? EvalReport = null,
     RunOutcome? Outcome = null,
@@ -33,7 +34,61 @@ public static class RunStateUpdates
             artifacts,
             RunLifecycleStatus.Created,
             ImmutableDictionary<string, LoadedMode>.Empty,
-            ExecutionNodeStateFactory.CreatePending(plan));
+            ExecutionNodeStateFactory.CreatePending(plan),
+            CreatePlannedLedger(artifacts));
+    }
+
+    private static ImmutableArray<RunArtifactState> CreatePlannedLedger(
+        RunArtifactPaths artifacts) =>
+        new[]
+        {
+            artifacts.InputPath,
+            artifacts.ResultPath,
+            artifacts.PatternPath,
+            artifacts.RunSummaryPath,
+            artifacts.TracePath,
+            artifacts.EvalReportPath,
+            artifacts.RunManifestPath
+        }
+        .Select(path =>
+            new RunArtifactState(
+                Path.GetFileName(path),
+                RunArtifactStatus.Planned))
+        .ToImmutableArray();
+
+    /// <summary>Records that a required artifact completed successfully.</summary>
+    public static RunState MarkArtifactWritten(RunState state, string name) =>
+        SetArtifactStatus(Require(state), name, RunArtifactStatus.Written);
+
+    /// <summary>Records that a required artifact write was attempted but failed.</summary>
+    public static RunState MarkArtifactFailed(RunState state, string name) =>
+        SetArtifactStatus(Require(state), name, RunArtifactStatus.Failed);
+
+    private static RunState SetArtifactStatus(
+        RunState state,
+        string name,
+        RunArtifactStatus status)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        var entry = new RunArtifactState(name, status);
+        for (var index = 0; index < state.ArtifactLedger.Length; index++)
+        {
+            if (string.Equals(
+                    state.ArtifactLedger[index].Name,
+                    name,
+                    StringComparison.Ordinal))
+            {
+                return state with
+                {
+                    ArtifactLedger = state.ArtifactLedger.SetItem(index, entry)
+                };
+            }
+        }
+
+        return state with
+        {
+            ArtifactLedger = state.ArtifactLedger.Add(entry)
+        };
     }
 
     public static RunState Start(RunState state) =>

@@ -51,7 +51,7 @@ public sealed class EvalRunner : IEvalRunner
         var events = context.TraceEvents;
         var checks = new List<EvalCheckResult>
         {
-            CheckRequiredArtifacts(context.Artifacts),
+            CheckRequiredArtifacts(context),
             CheckTraceEvent(events, TraceEventNames.RunStarted),
             CheckTraceEvent(events, TraceEventNames.RunCompleted),
             new(
@@ -123,20 +123,51 @@ public sealed class EvalRunner : IEvalRunner
         return builder.ToString();
     }
 
-    private static EvalCheckResult CheckRequiredArtifacts(
-        RunArtifactPaths artifacts)
+    private static EvalCheckResult CheckRequiredArtifacts(EvalContext context)
     {
-        var missing = artifacts.RequiredPaths
-            .Where(path => !File.Exists(path))
-            .Select(Path.GetFileName)
+        var ledger = context.ArtifactLedger;
+        if (ledger is null || ledger.Count == 0)
+        {
+            // No artifact ledger supplied (for example a direct eval): fall back
+            // to verifying the required artifact files exist on disk.
+            var missingFiles = context.Artifacts.RequiredPaths
+                .Where(path => !File.Exists(path))
+                .Select(Path.GetFileName)
+                .ToArray();
+
+            return new EvalCheckResult(
+                "required artifacts exist",
+                missingFiles.Length == 0,
+                missingFiles.Length == 0
+                    ? "All required artifact paths exist."
+                    : $"Missing artifacts: {string.Join(", ", missingFiles)}.");
+        }
+
+        // The runtime tracks artifact planning and completion explicitly, so the
+        // check no longer depends on a placeholder eval report existing on disk.
+        // It fails when an artifact's write was attempted and failed, or when an
+        // artifact reported as written is missing on disk. Planned-but-pending
+        // artifacts (the eval report and run manifest, produced after this check)
+        // are expected and do not fail it.
+        var failed = ledger
+            .Where(artifact => artifact.Status == RunArtifactStatus.Failed)
+            .Select(artifact => artifact.Name)
             .ToArray();
+        var writtenButMissing = ledger
+            .Where(artifact =>
+                artifact.Status == RunArtifactStatus.Written &&
+                !File.Exists(
+                    Path.Combine(context.Artifacts.RunDirectory, artifact.Name)))
+            .Select(artifact => artifact.Name)
+            .ToArray();
+        var problems = failed.Concat(writtenButMissing).ToArray();
 
         return new EvalCheckResult(
             "required artifacts exist",
-            missing.Length == 0,
-            missing.Length == 0
-                ? "All required artifact paths exist."
-                : $"Missing artifacts: {string.Join(", ", missing)}.");
+            problems.Length == 0,
+            problems.Length == 0
+                ? "All written required artifacts exist; none failed."
+                : $"Failed or missing artifacts: {string.Join(", ", problems)}.");
     }
 
     private static EvalCheckResult CheckTraceEvent(

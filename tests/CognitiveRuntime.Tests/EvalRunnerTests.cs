@@ -223,6 +223,75 @@ public sealed class EvalRunnerTests
             check => check.Name == "loop responded to critic findings");
     }
 
+    [Fact]
+    public async Task EvaluateAsync_RequiredArtifactsCheckUsesLedgerAndFailsOnFailedArtifact()
+    {
+        using var workspace = new TestWorkspace();
+        var writer = new ArtifactWriter(TimeProvider.System);
+        var artifacts = await writer.PrepareRunAsync(
+            workspace.OutputRoot,
+            "frame",
+            "12345678");
+
+        foreach (var kind in Enum.GetValues<ArtifactKind>())
+        {
+            await writer.WriteAsync(artifacts, kind, "content");
+        }
+
+        await File.WriteAllTextAsync(artifacts.TracePath, "{}");
+        var mode = new LoadedMode(
+            workspace.Root,
+            "# Test",
+            new ModeManifest
+            {
+                Name = "frame",
+                Description = "Test.",
+                OutputContract = new OutputContract
+                {
+                    RequiredHeadings = ["## Problem"],
+                    MinimumLength = 5
+                }
+            },
+            []);
+        var events = new[]
+        {
+            CreateEvent(TraceEventNames.RunStarted),
+            CreateEvent(TraceEventNames.ModelCompleted, "main"),
+            CreateEvent(TraceEventNames.RunCompleted)
+        };
+        var phaseResults = new[]
+        {
+            CreatePhaseResult(PhaseKind.Main, "## Problem\n\nBound the problem.")
+        };
+        // A planned eval report is acceptable (produced after this check), but a
+        // failed artifact write makes the check fail without any placeholder text.
+        var ledger = new[]
+        {
+            new RunArtifactState("result.md", RunArtifactStatus.Written),
+            new RunArtifactState("eval_report.md", RunArtifactStatus.Planned),
+            new RunArtifactState("run_summary.md", RunArtifactStatus.Failed)
+        };
+        var runner = new EvalRunner(new OutputContractValidator());
+
+        var report = await runner.EvaluateAsync(
+            new EvalContext(
+                artifacts,
+                mode,
+                events,
+                phaseResults,
+                new EvalPlan(
+                    [PhaseKind.Main],
+                    PhaseKind.Main,
+                    EvaluateLoopEfficacy: false),
+                ArtifactLedger: ledger));
+
+        var artifactCheck = Assert.Single(
+            report.Checks,
+            check => check.Name == "required artifacts exist");
+        Assert.False(artifactCheck.Passed);
+        Assert.Contains("run_summary.md", artifactCheck.Details);
+    }
+
     private static PhaseResult CreatePhaseResult(
         PhaseKind phaseKind,
         string content) =>

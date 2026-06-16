@@ -910,6 +910,8 @@ Acceptance:
 
 Priority: `P1`
 
+Status: Complete.
+
 The current flow reserves `eval_report.md` with placeholder content so the eval
 can check its own existence.
 

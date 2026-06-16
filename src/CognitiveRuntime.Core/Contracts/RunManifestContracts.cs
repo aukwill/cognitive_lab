@@ -86,5 +86,6 @@ public sealed record RunManifest(
     IReadOnlyList<RunManifestExecutionNode> ExecutionNodes,
     IReadOnlyList<RunManifestStageOutcome> Stages,
     IReadOnlyList<RunManifestArtifact> Artifacts,
+    IReadOnlyList<RunArtifactState> ArtifactLedger,
     RunManifestEvalSummary? Evaluation,
     RuntimeFailureInfo? Failure);

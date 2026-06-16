@@ -85,3 +85,18 @@ public sealed record PhaseResult(
     string Content,
     string Provider,
     string? Model);
+
+/// <summary>
+/// The lifecycle of a required run artifact. The runtime plans an artifact
+/// before it is produced, marks it written on success, and marks it failed when
+/// its write is attempted but does not complete. This makes artifact planning
+/// and completion explicit instead of inferring them from placeholder content.
+/// </summary>
+public enum RunArtifactStatus
+{
+    Planned,
+    Written,
+    Failed
+}
+
+public sealed record RunArtifactState(string Name, RunArtifactStatus Status);

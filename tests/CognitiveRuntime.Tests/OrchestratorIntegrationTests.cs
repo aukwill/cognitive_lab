@@ -336,10 +336,28 @@ public sealed class OrchestratorIntegrationTests
                 ["phases/01-main.md", "phases/02-critic.md", "phases/03-revision.md"],
                 phaseArtifacts);
 
+            // The artifact ledger records planning vs completion explicitly
+            // (TA-010). Everything is written except run.json itself, which is
+            // still being produced when the manifest is built.
+            var ledger = root.GetProperty("artifactLedger")
+                .EnumerateArray()
+                .ToDictionary(
+                    entry => entry.GetProperty("name").GetString() ?? string.Empty,
+                    entry => entry.GetProperty("status").GetString() ?? string.Empty);
+            Assert.Equal("written", ledger["input.md"]);
+            Assert.Equal("written", ledger["result.md"]);
+            Assert.Equal("written", ledger["eval_report.md"]);
+            Assert.Equal("written", ledger["trace.json"]);
+            Assert.Equal("planned", ledger["run.json"]);
+
             Assert.Equal(
                 JsonValueKind.Null,
                 root.GetProperty("failure").ValueKind);
         }
+
+        // The eval report is the real report, not the retired placeholder.
+        var evalReportText = await File.ReadAllTextAsync(result.EvalReportPath);
+        Assert.DoesNotContain("Evaluation has not run yet", evalReportText);
 
         // Phase outputs are persisted as numbered files; result.md above stays
         // the authoritative composition.
@@ -380,6 +398,18 @@ public sealed class OrchestratorIntegrationTests
 
         Assert.Contains("run.started", eventTypes);
         Assert.Contains("mode.loaded", eventTypes);
+
+        // The planned artifact set is announced via artifact.reserved.
+        var reservedEvent = traceEvents.Single(
+            traceEvent => traceEvent.GetProperty("type").GetString() == "artifact.reserved");
+        var reservedNames = reservedEvent.GetProperty("data")
+            .GetProperty("artifacts")
+            .EnumerateArray()
+            .Select(name => name.GetString() ?? string.Empty)
+            .ToArray();
+        Assert.Contains("eval_report.md", reservedNames);
+        Assert.Contains("run.json", reservedNames);
+
         Assert.Contains("pattern.started", eventTypes);
         Assert.Contains("pattern.completed", eventTypes);
         Assert.Contains("phase.started", eventTypes);
@@ -738,6 +768,18 @@ public sealed class OrchestratorIntegrationTests
             Assert.Equal(
                 "provider",
                 root.GetProperty("failure").GetProperty("category").GetString());
+
+            // A partial run distinguishes written from never-reached (planned)
+            // artifacts (TA-010). The best-effort failure artifacts are written,
+            // while pattern.md is never produced and stays planned.
+            var ledger = root.GetProperty("artifactLedger")
+                .EnumerateArray()
+                .ToDictionary(
+                    entry => entry.GetProperty("name").GetString() ?? string.Empty,
+                    entry => entry.GetProperty("status").GetString() ?? string.Empty);
+            Assert.Equal("written", ledger["result.md"]);
+            Assert.Equal("written", ledger["eval_report.md"]);
+            Assert.Equal("planned", ledger["pattern.md"]);
         }
 
         var eval = await File.ReadAllTextAsync(

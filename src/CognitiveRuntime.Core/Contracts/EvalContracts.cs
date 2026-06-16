@@ -30,4 +30,5 @@ public sealed record EvalContext(
     IReadOnlyList<PhaseResult> PhaseResults,
     EvalPlan Plan,
     IReadOnlyDictionary<string, PhaseResult>? NodeResultsById = null,
-    string? AuthoritativeContent = null);
+    string? AuthoritativeContent = null,
+    IReadOnlyList<RunArtifactState>? ArtifactLedger = null);

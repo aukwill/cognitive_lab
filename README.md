@@ -270,6 +270,15 @@ inventory is recorded by the dungeon experiment's `run.json`. Serialization is
 deterministic for a fixed run, and the manifest contains no credentials or
 provider request bodies.
 
+The runtime tracks each required artifact through an explicit ledger of
+`planned`, `written`, and `failed` states rather than reserving a placeholder
+`eval_report.md` for the eval to find. The planned set is announced with an
+`artifact.reserved` event; each artifact becomes `written` on success or
+`failed` when its write is attempted but does not complete. The
+required-artifact eval reads this ledger (no placeholder text), and `run.json`
+records it so a partial run distinguishes which artifacts were planned,
+written, and failed.
+
 The shared executor also emits stable `node.started` and terminal
 `node.completed`, `node.failed`, or `node.cancelled` events. Deterministic
 evaluation compares these events and their context-source IDs against the

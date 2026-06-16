@@ -105,8 +105,23 @@ public sealed class Orchestrator
                 },
                 cancellationToken);
 
-            await WriteArtifactAsync(
-                artifacts,
+            // Announce the artifacts the runtime is committed to producing. The
+            // trace file already exists at this point, so mark it written.
+            await trace.EmitAsync(
+                TraceEventNames.ArtifactReserved,
+                new Dictionary<string, object?>
+                {
+                    ["artifacts"] = state.ArtifactLedger
+                        .Select(artifact => artifact.Name)
+                        .ToArray()
+                },
+                cancellationToken);
+            state = RunStateUpdates.MarkArtifactWritten(
+                state,
+                Path.GetFileName(state.Artifacts.TracePath));
+
+            state = await WriteTrackedArtifactAsync(
+                state,
                 ArtifactKind.Input,
                 $"# Input{Environment.NewLine}{Environment.NewLine}{request.Input.Trim()}{Environment.NewLine}",
                 trace,
@@ -142,15 +157,15 @@ public sealed class Orchestrator
                 CreatePatternCompletedData(state.Execution!),
                 cancellationToken);
 
-            await WriteArtifactAsync(
-                state.Artifacts,
+            state = await WriteTrackedArtifactAsync(
+                state,
                 ArtifactKind.Pattern,
                 PatternMarkdownRenderer.Render(state.Execution!),
                 trace,
                 cancellationToken);
 
-            await WriteArtifactAsync(
-                state.Artifacts,
+            state = await WriteTrackedArtifactAsync(
+                state,
                 ArtifactKind.Result,
                 state.Execution!.ResultContent,
                 trace,
@@ -163,25 +178,11 @@ public sealed class Orchestrator
             var summary = RenderRunSummary(
                 request,
                 state);
-            await WriteArtifactAsync(
-                state.Artifacts,
+            state = await WriteTrackedArtifactAsync(
+                state,
                 ArtifactKind.RunSummary,
                 summary,
                 trace,
-                cancellationToken);
-
-            // Reserve the self-referential eval artifact before checking artifact existence.
-            await _artifactWriter.WriteAsync(
-                state.Artifacts,
-                ArtifactKind.EvalReport,
-                "# Evaluation Report\n\nEvaluation has not run yet.\n",
-                cancellationToken);
-            await trace.EmitAsync(
-                TraceEventNames.ArtifactReserved,
-                new Dictionary<string, object?>
-                {
-                    ["name"] = Path.GetFileName(state.Artifacts.EvalReportPath)
-                },
                 cancellationToken);
 
             // This event marks completion of the cognitive loop. Post-run eval follows.
@@ -219,7 +220,8 @@ public sealed class Orchestrator
                                 state.Plan.AuthoritativeNodeId,
                                 StringComparison.Ordinal))
                         .PhaseResult
-                        .Content),
+                        .Content,
+                    state.ArtifactLedger),
                 cancellationToken);
             state = RunStateUpdates.CompleteEvaluation(state, evalReport);
             await PersistRunAsync(
@@ -241,8 +243,8 @@ public sealed class Orchestrator
                 },
                 cancellationToken);
 
-            await WriteArtifactAsync(
-                state.Artifacts,
+            state = await WriteTrackedArtifactAsync(
+                state,
                 ArtifactKind.EvalReport,
                 EvalRunner.RenderMarkdown(state.EvalReport!),
                 trace,
@@ -392,6 +394,26 @@ public sealed class Orchestrator
             cancellationToken);
     }
 
+    // Writes an artifact and records its completion in the run's artifact ledger,
+    // so artifact planning and completion are tracked explicitly.
+    private async Task<RunState> WriteTrackedArtifactAsync(
+        RunState state,
+        ArtifactKind kind,
+        string content,
+        ITraceSession trace,
+        CancellationToken cancellationToken)
+    {
+        await WriteArtifactAsync(
+            state.Artifacts,
+            kind,
+            content,
+            trace,
+            cancellationToken);
+        return RunStateUpdates.MarkArtifactWritten(
+            state,
+            Path.GetFileName(state.Artifacts.GetPath(kind)));
+    }
+
     private async Task WritePhaseOutputsAsync(
         RunState state,
         ITraceSession trace,
@@ -487,26 +509,26 @@ public sealed class Orchestrator
         DateTimeOffset runStartedAt,
         RuntimeFailureInfo failure)
     {
-        await WriteFailureArtifactIfMissingAsync(
-            state.Artifacts,
+        state = await WriteFailureArtifactIfMissingAsync(
+            state,
             ArtifactKind.Input,
             $"# Input{Environment.NewLine}{Environment.NewLine}" +
             $"{request.Input.Trim()}{Environment.NewLine}");
-        await WriteFailureArtifactIfMissingAsync(
-            state.Artifacts,
+        state = await WriteFailureArtifactIfMissingAsync(
+            state,
             ArtifactKind.Result,
             $"# Run Failed{Environment.NewLine}{Environment.NewLine}" +
             "No cognitive result was produced." +
             Environment.NewLine);
-        await WriteFailureArtifactIfMissingAsync(
-            state.Artifacts,
+        state = await WriteFailureArtifactIfMissingAsync(
+            state,
             ArtifactKind.RunSummary,
             $"# Run Summary{Environment.NewLine}{Environment.NewLine}" +
             $"Status: **FAILED**{Environment.NewLine}{Environment.NewLine}" +
             $"Category: `{failure.Category}`{Environment.NewLine}{Environment.NewLine}" +
             $"{failure.SafeMessage}{Environment.NewLine}");
-        await WriteFailureArtifactIfMissingAsync(
-            state.Artifacts,
+        state = await WriteFailureArtifactIfMissingAsync(
+            state,
             ArtifactKind.EvalReport,
             $"# Evaluation Report{Environment.NewLine}{Environment.NewLine}" +
             $"Overall: **FAIL**{Environment.NewLine}{Environment.NewLine}" +
@@ -554,24 +576,24 @@ public sealed class Orchestrator
         RunRequest request,
         DateTimeOffset runStartedAt)
     {
-        await WriteFailureArtifactIfMissingAsync(
-            state.Artifacts,
+        state = await WriteFailureArtifactIfMissingAsync(
+            state,
             ArtifactKind.Input,
             $"# Input{Environment.NewLine}{Environment.NewLine}" +
             $"{request.Input.Trim()}{Environment.NewLine}");
-        await WriteFailureArtifactIfMissingAsync(
-            state.Artifacts,
+        state = await WriteFailureArtifactIfMissingAsync(
+            state,
             ArtifactKind.Result,
             $"# Run Cancelled{Environment.NewLine}{Environment.NewLine}" +
             "The run was cancelled before a cognitive result was finalized." +
             Environment.NewLine);
-        await WriteFailureArtifactIfMissingAsync(
-            state.Artifacts,
+        state = await WriteFailureArtifactIfMissingAsync(
+            state,
             ArtifactKind.RunSummary,
             $"# Run Summary{Environment.NewLine}{Environment.NewLine}" +
             $"Status: **CANCELLED**{Environment.NewLine}");
-        await WriteFailureArtifactIfMissingAsync(
-            state.Artifacts,
+        state = await WriteFailureArtifactIfMissingAsync(
+            state,
             ArtifactKind.EvalReport,
             $"# Evaluation Report{Environment.NewLine}{Environment.NewLine}" +
             $"Overall: **NOT RUN**{Environment.NewLine}{Environment.NewLine}" +
@@ -660,23 +682,28 @@ public sealed class Orchestrator
             cancellationToken);
     }
 
-    private async Task WriteFailureArtifactIfMissingAsync(
-        RunArtifactPaths artifacts,
+    private async Task<RunState> WriteFailureArtifactIfMissingAsync(
+        RunState state,
         ArtifactKind kind,
         string content)
     {
-        if (File.Exists(artifacts.GetPath(kind)))
+        var name = Path.GetFileName(state.Artifacts.GetPath(kind));
+        if (File.Exists(state.Artifacts.GetPath(kind)))
         {
-            return;
+            return RunStateUpdates.MarkArtifactWritten(state, name);
         }
 
         try
         {
-            await _artifactWriter.WriteAsync(artifacts, kind, content);
+            await _artifactWriter.WriteAsync(state.Artifacts, kind, content);
+            return RunStateUpdates.MarkArtifactWritten(state, name);
         }
         catch
         {
-            // Best effort only; the original run error remains authoritative.
+            // Best effort only; the original run error remains authoritative. The
+            // ledger records the attempt as failed so a partial run distinguishes
+            // planned, written, and failed artifacts.
+            return RunStateUpdates.MarkArtifactFailed(state, name);
         }
     }
 
