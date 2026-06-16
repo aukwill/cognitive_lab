@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using CognitiveRuntime.Core.Artifacts;
 using CognitiveRuntime.Core.Experiments.Dungeons;
@@ -245,5 +246,61 @@ public sealed class DungeonExperimentTests
         Assert.All(
             checks.EnumerateArray(),
             check => Assert.True(check.GetProperty("passed").GetBoolean()));
+
+        // Experiment trace events are emitted through DungeonTraceEventNames
+        // constants rather than bare literals; the four event types appear by
+        // name in the trace.
+        using var traceDocument = JsonDocument.Parse(
+            await File.ReadAllTextAsync(result.Run.TracePath));
+        var eventTypes = traceDocument.RootElement
+            .GetProperty("events")
+            .EnumerateArray()
+            .Select(traceEvent => traceEvent.GetProperty("type").GetString())
+            .ToArray();
+        Assert.Contains("selection.completed", eventTypes);
+        Assert.Contains("candidate.started", eventTypes);
+        Assert.Contains("candidate.completed", eventTypes);
+        Assert.Contains("verifier.completed", eventTypes);
+
+        // Plan enums serialize as camelCase to match the lowercase contract the
+        // prompts give the model, not the default PascalCase enum names.
+        var winnerPlanPath = Path.Combine(
+            result.Run.OutputDirectory, "winner", "dungeon_plan.json");
+        var winnerPlanJson = await File.ReadAllTextAsync(winnerPlanPath);
+        Assert.Contains("\"guarded\"", winnerPlanJson);
+        Assert.Contains("\"entrance\"", winnerPlanJson);
+        Assert.DoesNotContain("\"Guarded\"", winnerPlanJson);
+        Assert.DoesNotContain("\"Entrance\"", winnerPlanJson);
+
+        // TA-007: the experiment run.json records SHA-256 and byte length for
+        // each completed artifact, matching the bytes on disk.
+        using var manifestDocument = JsonDocument.Parse(
+            await File.ReadAllTextAsync(
+                Path.Combine(result.Run.OutputDirectory, "run.json")));
+        var artifacts = manifestDocument.RootElement
+            .GetProperty("artifacts")
+            .EnumerateArray()
+            .ToArray();
+        var planArtifact = artifacts.Single(
+            artifact =>
+                artifact.GetProperty("relativePath").GetString() ==
+                "winner/dungeon_plan.json");
+        var planBytes = await File.ReadAllBytesAsync(winnerPlanPath);
+        Assert.Equal(
+            planBytes.LongLength,
+            planArtifact.GetProperty("byteLength").GetInt64());
+        Assert.Equal(
+            Convert.ToHexString(SHA256.HashData(planBytes)).ToLowerInvariant(),
+            planArtifact.GetProperty("sha256").GetString());
+
+        // run.json and trace.json are not final at manifest time, so their
+        // integrity is recorded as unknown rather than a stale hash.
+        foreach (var nonFinal in new[] { "run.json", "trace.json" })
+        {
+            var entry = artifacts.Single(
+                artifact => artifact.GetProperty("relativePath").GetString() == nonFinal);
+            Assert.Equal(JsonValueKind.Null, entry.GetProperty("byteLength").ValueKind);
+            Assert.Equal(JsonValueKind.Null, entry.GetProperty("sha256").ValueKind);
+        }
     }
 }
