@@ -68,6 +68,20 @@ public interface IArtifactWriter
         ArtifactKind kind,
         string content,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Persists one phase output under <c>&lt;baseDirectory&gt;/phases/</c> as
+    /// <c>NN-&lt;phase&gt;.md</c>. <paramref name="baseDirectory"/> is the run
+    /// directory for simple patterns or a stage directory for pipelines; it must
+    /// be contained by the run directory. Returns the written file path.
+    /// </summary>
+    Task<string> WritePhaseAsync(
+        RunArtifactPaths artifacts,
+        string baseDirectory,
+        int index,
+        string phaseName,
+        string content,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ITraceSession

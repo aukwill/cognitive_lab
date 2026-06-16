@@ -156,6 +156,10 @@ public sealed class Orchestrator
                 trace,
                 cancellationToken);
 
+            // result.md above remains the authoritative composition; these are
+            // the individual phase outputs persisted for inspection.
+            await WritePhaseOutputsAsync(state, trace, cancellationToken);
+
             var summary = RenderRunSummary(
                 request,
                 state);
@@ -387,6 +391,80 @@ public sealed class Orchestrator
             kind.ToString().ToLowerInvariant(),
             cancellationToken);
     }
+
+    private async Task WritePhaseOutputsAsync(
+        RunState state,
+        ITraceSession trace,
+        CancellationToken cancellationToken)
+    {
+        var execution = state.Execution!;
+        if (execution.Stages.Count == 0)
+        {
+            await WritePhaseGroupAsync(
+                state.Artifacts,
+                state.Artifacts.RunDirectory,
+                execution.NodeResults
+                    .Select(node => node.PhaseResult)
+                    .ToArray(),
+                trace,
+                cancellationToken);
+            return;
+        }
+
+        // Pipeline phases live under their own stage directory, mirroring the
+        // stage's input.md/result.md layout.
+        foreach (var stage in execution.Stages)
+        {
+            await WritePhaseGroupAsync(
+                state.Artifacts,
+                stage.StageDirectory,
+                stage.PhaseResults,
+                trace,
+                cancellationToken);
+        }
+    }
+
+    private async Task WritePhaseGroupAsync(
+        RunArtifactPaths artifacts,
+        string baseDirectory,
+        IReadOnlyList<PhaseResult> phaseResults,
+        ITraceSession trace,
+        CancellationToken cancellationToken)
+    {
+        for (var index = 0; index < phaseResults.Count; index++)
+        {
+            var phaseResult = phaseResults[index];
+            var path = await _artifactWriter.WritePhaseAsync(
+                artifacts,
+                baseDirectory,
+                index + 1,
+                phaseResult.PhaseName,
+                phaseResult.Content,
+                cancellationToken);
+            await TracePhaseWrittenAsync(
+                trace,
+                artifacts.RunDirectory,
+                path,
+                cancellationToken);
+        }
+    }
+
+    private static Task TracePhaseWrittenAsync(
+        ITraceSession trace,
+        string runDirectory,
+        string path,
+        CancellationToken cancellationToken) =>
+        trace.EmitAsync(
+            TraceEventNames.ArtifactWritten,
+            new Dictionary<string, object?>
+            {
+                ["name"] = Path.GetFileName(path),
+                ["kind"] = "phase",
+                ["relativePath"] = Path
+                    .GetRelativePath(runDirectory, path)
+                    .Replace('\\', '/')
+            },
+            cancellationToken);
 
     private static Task TraceArtifactWrittenAsync(
         ITraceSession trace,

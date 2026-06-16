@@ -52,6 +52,19 @@ public sealed class PipelineOrchestratorTests
         Assert.True(File.Exists(
             Path.Combine(result.OutputDirectory, "stages", "02-challenge", "result.md")));
 
+        // Each stage persists its own phase outputs under stages/NN-mode/phases.
+        foreach (var stageDir in new[] { "01-frame", "02-challenge" })
+        {
+            foreach (var phaseFile in new[]
+                { "01-main.md", "02-critic.md", "03-revision.md" })
+            {
+                var phasePath = Path.Combine(
+                    result.OutputDirectory, "stages", stageDir, "phases", phaseFile);
+                Assert.True(
+                    File.Exists(phasePath), $"Missing phase artifact: {phasePath}");
+            }
+        }
+
         var runSummaryMarkdown = await File.ReadAllTextAsync(
             Path.Combine(result.OutputDirectory, "run_summary.md"));
         Assert.Contains("Pattern: `linear-pipeline`", runSummaryMarkdown);
@@ -107,6 +120,12 @@ public sealed class PipelineOrchestratorTests
                 artifact =>
                     artifact.GetProperty("relativePath").GetString() ==
                     "stages/02-challenge/result.md");
+            Assert.Contains(
+                root.GetProperty("artifacts").EnumerateArray(),
+                artifact =>
+                    artifact.GetProperty("relativePath").GetString() ==
+                    "stages/01-frame/phases/01-main.md" &&
+                    artifact.GetProperty("kind").GetString() == "phaseOutput");
         }
 
         await using var traceStream = File.OpenRead(result.TracePath);
@@ -230,6 +249,12 @@ public sealed class PipelineOrchestratorTests
         Assert.Contains("## Authoritative Result", resultMarkdown);
         Assert.Contains("## Problem", resultMarkdown);
         Assert.DoesNotContain("## Critic Review", resultMarkdown);
+
+        // Single-pass persists only its one main phase output.
+        Assert.True(File.Exists(
+            Path.Combine(result.OutputDirectory, "phases", "01-main.md")));
+        Assert.False(File.Exists(
+            Path.Combine(result.OutputDirectory, "phases", "02-critic.md")));
 
         var evalMarkdown = await File.ReadAllTextAsync(result.EvalReportPath);
         Assert.Contains("Overall: **PASS**", evalMarkdown);

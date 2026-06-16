@@ -114,6 +114,67 @@ public sealed class ArtifactWriter : IArtifactWriter
         return safeModeName;
     }
 
+    public async Task<string> WritePhaseAsync(
+        RunArtifactPaths artifacts,
+        string baseDirectory,
+        int index,
+        string phaseName,
+        string content,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(artifacts);
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(phaseName);
+        ArgumentNullException.ThrowIfNull(content);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(index);
+
+        var safePhaseName = SanitizePhaseName(phaseName);
+        var phasesDirectory = Path.GetFullPath(
+            Path.Combine(baseDirectory, "phases"));
+        var path = Path.Combine(
+            phasesDirectory,
+            $"{index:D2}-{safePhaseName}.md");
+
+        // Both the phases directory and the file must stay inside the run
+        // directory, even when baseDirectory is an attacker-influenced value.
+        EnsureWithinRunDirectory(artifacts.RunDirectory, phasesDirectory);
+        EnsureWithinRunDirectory(artifacts.RunDirectory, path);
+        Directory.CreateDirectory(phasesDirectory);
+
+        await FilePersistence.WriteAllTextAtomicAsync(
+            path,
+            content,
+            cancellationToken);
+        await _artifactStore.PutAsync(
+            StoredRunArtifactFactory.CreateText(
+                artifacts.RunId,
+                artifacts.RootDirectory,
+                path,
+                "text/markdown; charset=utf-8",
+                content,
+                _timeProvider.GetUtcNow()),
+            cancellationToken);
+        return path;
+    }
+
+    private static string SanitizePhaseName(string phaseName)
+    {
+        var safePhaseName = new string(
+            phaseName
+                .Where(character =>
+                    char.IsAsciiLetterOrDigit(character) || character == '-')
+                .ToArray());
+
+        if (safePhaseName.Length == 0)
+        {
+            throw new ArgumentException(
+                "Phase name does not contain a safe path component.",
+                nameof(phaseName));
+        }
+
+        return safePhaseName;
+    }
+
     private static string ValidateRunId(string runId)
     {
         if (runId.Length > 64 ||
