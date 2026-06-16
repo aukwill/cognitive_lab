@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using CognitiveRuntime.Core.Abstractions;
 using CognitiveRuntime.Core.Artifacts;
@@ -293,12 +294,37 @@ public sealed class OrchestratorIntegrationTests
                     node.GetProperty("status").GetString()));
             Assert.True(
                 root.GetProperty("evaluation").GetProperty("passed").GetBoolean());
+            var artifacts = root.GetProperty("artifacts").EnumerateArray().ToArray();
             Assert.Contains(
-                root.GetProperty("artifacts").EnumerateArray(),
+                artifacts,
                 artifact =>
                     artifact.GetProperty("relativePath").GetString() == "run.json" &&
                     artifact.GetProperty("mediaType").GetString() ==
                     "application/json; charset=utf-8");
+
+            // Each completed artifact records integrity that matches its bytes on
+            // disk, so a verifier can detect a modified or truncated file.
+            var resultArtifact = artifacts.Single(
+                artifact => artifact.GetProperty("relativePath").GetString() == "result.md");
+            var resultBytes = await File.ReadAllBytesAsync(result.ResultPath);
+            Assert.Equal(
+                resultBytes.LongLength,
+                resultArtifact.GetProperty("byteLength").GetInt64());
+            Assert.Equal(
+                Convert.ToHexString(SHA256.HashData(resultBytes)).ToLowerInvariant(),
+                resultArtifact.GetProperty("sha256").GetString());
+
+            // The manifest is written last and cannot hash itself, so its own
+            // integrity is recorded as unknown rather than guessed.
+            var manifestArtifact = artifacts.Single(
+                artifact => artifact.GetProperty("relativePath").GetString() == "run.json");
+            Assert.Equal(
+                JsonValueKind.Null,
+                manifestArtifact.GetProperty("byteLength").ValueKind);
+            Assert.Equal(
+                JsonValueKind.Null,
+                manifestArtifact.GetProperty("sha256").ValueKind);
+
             Assert.Equal(
                 JsonValueKind.Null,
                 root.GetProperty("failure").ValueKind);

@@ -862,6 +862,8 @@ Acceptance:
 
 Priority: `P1`
 
+Status: Complete.
+
 Acceptance:
 
 - `run.json` records SHA-256 and byte length for completed artifacts.

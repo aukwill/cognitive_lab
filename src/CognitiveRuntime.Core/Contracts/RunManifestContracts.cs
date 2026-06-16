@@ -60,7 +60,9 @@ public sealed record RunManifestStageOutcome(
 public sealed record RunManifestArtifact(
     string RelativePath,
     string Kind,
-    string MediaType);
+    string MediaType,
+    long? ByteLength,
+    string? Sha256);
 
 public sealed record RunManifestEvalSummary(
     bool Passed,
