@@ -97,7 +97,9 @@ public sealed class Orchestrator
                 {
                     ["mode"] = request.ModeName,
                     ["provider"] = request.ModelProvider,
-                    ["outputDirectory"] = artifacts.RunDirectory,
+                    // Run directory name only, so trace.json stays
+                    // location-independent and leaks no machine username.
+                    ["outputDirectory"] = Path.GetFileName(artifacts.RunDirectory),
                     ["pattern"] = plan.PatternName,
                     ["stages"] = GetStageModeNames(plan)
                 },
@@ -630,7 +632,11 @@ public sealed class Orchestrator
 
         builder
             .AppendLine($"- Model provider: `{request.ModelProvider}`")
-            .AppendLine($"- Output directory: `{state.Artifacts.RunDirectory}`")
+            // Use the run directory name, not the absolute path: the artifact
+            // stays location-independent (reproducible, no machine username leak)
+            // and hashes identically across runs of the same fixed run.
+            .AppendLine(
+                $"- Output directory: `{Path.GetFileName(state.Artifacts.RunDirectory)}`")
             .AppendLine()
             .AppendLine(execution.Stages.Count == 0
                 ? "## Phase Results"

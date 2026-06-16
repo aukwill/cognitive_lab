@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CognitiveRuntime.Core.Artifacts;
@@ -170,10 +171,13 @@ internal static class RunManifestFactory
                 var relativePath = Path
                     .GetRelativePath(artifacts.RunDirectory, path)
                     .Replace('\\', '/');
+                var (byteLength, sha256) = ComputeIntegrity(path);
                 return new RunManifestArtifact(
                     relativePath,
                     GetArtifactKind(relativePath),
-                    GetMediaType(path));
+                    GetMediaType(path),
+                    byteLength,
+                    sha256);
             })
             .OrderBy(artifact => artifact.RelativePath, StringComparer.Ordinal)
             .ToArray();
@@ -221,6 +225,22 @@ internal static class RunManifestFactory
                 "stageArtifact",
             _ => "artifact"
         };
+
+    // Hashes are computed after each artifact's final content is written. The
+    // manifest is written last, so run.json (and any artifact not yet on disk)
+    // is recorded with unknown integrity rather than a guessed value.
+    private static (long? ByteLength, string? Sha256) ComputeIntegrity(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return (null, null);
+        }
+
+        var bytes = File.ReadAllBytes(path);
+        return (
+            bytes.LongLength,
+            Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
+    }
 
     private static string GetMediaType(string path) =>
         Path.GetExtension(path).ToLowerInvariant() switch

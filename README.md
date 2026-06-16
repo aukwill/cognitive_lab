@@ -254,7 +254,11 @@ schema-versioned manifest records run identity, requested mode, loaded mode
 versions, provider and model identifiers, start and end times, lifecycle and
 outcome, the resolved pattern plan, execution-node and stage outcomes,
 relative artifact inventory, eval summary, and sanitized failure information
-when applicable. Serialization is deterministic for a fixed run, and the
+when applicable. Each artifact in the inventory records its SHA-256 hash and
+byte length, computed from the final bytes on disk, so a verifier can detect a
+modified or truncated file. The manifest is written last and cannot hash
+itself, so `run.json` records its own integrity as unknown rather than a
+guessed value. Serialization is deterministic for a fixed run, and the
 manifest contains no credentials or provider request bodies.
 
 The shared executor also emits stable `node.started` and terminal
