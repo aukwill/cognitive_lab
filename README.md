@@ -46,7 +46,13 @@ Each run creates a timestamped directory under `outputs/` containing:
 - `eval_report.md`
 - `pattern.md`
 - `run.json`
+- `phases/NN-<phase>.md` - each phase output persisted individually
 - `index.html` when `--html` is present
+
+`result.md` remains the authoritative human-facing composition; the `phases/`
+files expose each phase's raw output for inspection and are listed in
+`run.json` and traced as artifact writes. For `linear-pipeline`, each stage
+writes its own `stages/NN-<mode>/phases/NN-<phase>.md`.
 
 ## Static HTML Inspection
 

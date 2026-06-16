@@ -217,6 +217,8 @@ internal static class RunManifestFactory
             "pattern.md" => "pattern",
             "run.json" => "runManifest",
             "index.html" => "htmlView",
+            _ when relativePath.Contains("phases/", StringComparison.Ordinal) =>
+                "phaseOutput",
             _ when relativePath.StartsWith("stages/", StringComparison.Ordinal) =>
                 "stageArtifact",
             _ => "artifact"

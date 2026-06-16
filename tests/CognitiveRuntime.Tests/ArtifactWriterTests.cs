@@ -62,4 +62,46 @@ public sealed class ArtifactWriterTests
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => writer.WriteAsync(escaped, ArtifactKind.Result, "blocked"));
     }
+
+    [Fact]
+    public async Task WritePhaseAsync_WritesNumberedFileUnderPhasesDirectory()
+    {
+        using var workspace = new TestWorkspace();
+        var writer = new ArtifactWriter(TimeProvider.System);
+        var artifacts = await writer.PrepareRunAsync(
+            workspace.OutputRoot,
+            "frame",
+            "12345678");
+
+        var path = await writer.WritePhaseAsync(
+            artifacts,
+            artifacts.RunDirectory,
+            2,
+            "critic",
+            "critic output");
+
+        Assert.Equal(
+            Path.Combine(artifacts.RunDirectory, "phases", "02-critic.md"),
+            path);
+        Assert.Equal("critic output", await File.ReadAllTextAsync(path));
+    }
+
+    [Fact]
+    public async Task WritePhaseAsync_RejectsBaseDirectoryOutsideRunDirectory()
+    {
+        using var workspace = new TestWorkspace();
+        var writer = new ArtifactWriter(TimeProvider.System);
+        var artifacts = await writer.PrepareRunAsync(
+            workspace.OutputRoot,
+            "frame",
+            "12345678");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => writer.WritePhaseAsync(
+                artifacts,
+                workspace.Root,
+                1,
+                "main",
+                "blocked"));
+    }
 }

@@ -875,6 +875,8 @@ artifact-level integrity checks.
 
 Priority: `P1`
 
+Status: Complete.
+
 Suggested layout:
 
 ```text

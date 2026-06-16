@@ -299,9 +299,33 @@ public sealed class OrchestratorIntegrationTests
                     artifact.GetProperty("relativePath").GetString() == "run.json" &&
                     artifact.GetProperty("mediaType").GetString() ==
                     "application/json; charset=utf-8");
+
+            // Individual phase outputs are listed in run.json (TA-008).
+            var phaseArtifacts = root.GetProperty("artifacts")
+                .EnumerateArray()
+                .Where(artifact =>
+                    artifact.GetProperty("kind").GetString() == "phaseOutput")
+                .Select(artifact =>
+                    artifact.GetProperty("relativePath").GetString() ?? string.Empty)
+                .ToArray();
+            Assert.Equal(
+                ["phases/01-main.md", "phases/02-critic.md", "phases/03-revision.md"],
+                phaseArtifacts);
+
             Assert.Equal(
                 JsonValueKind.Null,
                 root.GetProperty("failure").ValueKind);
+        }
+
+        // Phase outputs are persisted as numbered files; result.md above stays
+        // the authoritative composition.
+        var phasesDirectory = Path.Combine(result.OutputDirectory, "phases");
+        foreach (var phaseFile in new[]
+            { "01-main.md", "02-critic.md", "03-revision.md" })
+        {
+            var phasePath = Path.Combine(phasesDirectory, phaseFile);
+            Assert.True(File.Exists(phasePath), $"Missing phase artifact: {phasePath}");
+            Assert.NotEmpty(await File.ReadAllTextAsync(phasePath));
         }
 
         await using var traceStream = File.OpenRead(result.TracePath);
@@ -352,6 +376,21 @@ public sealed class OrchestratorIntegrationTests
             traceEvent =>
                 traceEvent.GetProperty("type").GetString() == "artifact.written" &&
                 traceEvent.GetProperty("data").GetProperty("name").GetString() == "run.json");
+
+        // Each phase output is traced as an artifact write carrying its
+        // run-relative path and the "phase" kind.
+        var tracedPhasePaths = traceEvents
+            .Where(traceEvent =>
+                traceEvent.GetProperty("type").GetString() == "artifact.written" &&
+                traceEvent.GetProperty("data").GetProperty("kind").GetString() == "phase")
+            .Select(traceEvent =>
+                traceEvent.GetProperty("data").GetProperty("relativePath").GetString()
+                    ?? string.Empty)
+            .ToArray();
+        Assert.Equal(
+            ["phases/01-main.md", "phases/02-critic.md", "phases/03-revision.md"],
+            tracedPhasePaths);
+
         Assert.Contains("eval.started", eventTypes);
         Assert.Contains("eval.completed", eventTypes);
         Assert.Contains("run.completed", eventTypes);
