@@ -934,6 +934,8 @@ Acceptance:
 
 Priority: `P1`
 
+Status: Complete.
+
 Centralizing event names does not prevent payload-key drift between producers,
 evals, views, and future readers.
 

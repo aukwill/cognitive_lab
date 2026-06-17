@@ -49,11 +49,11 @@ internal static partial class RuntimeFailureFactory
         RuntimeFailureInfo failure) =>
         new()
         {
-            ["category"] = ToTraceValue(failure.Category),
-            ["phase"] = failure.Phase,
-            ["provider"] = failure.Provider,
-            ["exceptionType"] = failure.ExceptionType,
-            ["message"] = failure.SafeMessage
+            [TracePayloadKeys.Category] = ToTraceValue(failure.Category),
+            [TracePayloadKeys.Phase] = failure.Phase,
+            [TracePayloadKeys.Provider] = failure.Provider,
+            [TracePayloadKeys.ExceptionType] = failure.ExceptionType,
+            [TracePayloadKeys.Message] = failure.SafeMessage
         };
 
     private static RuntimeFailureCategory Classify(

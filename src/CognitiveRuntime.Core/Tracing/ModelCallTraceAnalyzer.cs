@@ -37,7 +37,7 @@ public static class ModelCallTraceAnalyzer
 
         foreach (var traceEvent in relevantEvents)
         {
-            var callId = GetDataString(traceEvent, "callId");
+            var callId = GetDataString(traceEvent, TracePayloadKeys.CallId);
             if (string.IsNullOrWhiteSpace(callId))
             {
                 issues.Add(
@@ -77,12 +77,12 @@ public static class ModelCallTraceAnalyzer
             traceEvent => traceEvent.Type == TraceEventNames.ModelFailed);
         var terminalCount = completedCount + failedCount;
         var nodeIds = events
-            .Select(traceEvent => GetDataString(traceEvent, "nodeId"))
+            .Select(traceEvent => GetDataString(traceEvent, TracePayloadKeys.NodeId))
             .Where(nodeId => !string.IsNullOrWhiteSpace(nodeId))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         var attempts = events
-            .Select(traceEvent => GetDataInt32(traceEvent, "attempt"))
+            .Select(traceEvent => GetDataInt32(traceEvent, TracePayloadKeys.Attempt))
             .Where(attempt => attempt is not null)
             .Distinct()
             .ToArray();

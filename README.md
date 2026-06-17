@@ -229,7 +229,13 @@ stage's input source) from this same typed data.
 Core trace event names are defined once in `TraceEventNames`. Runtime
 producers, deterministic evals, lifecycle terminal-event projection, and
 static-view readers use that contract rather than repeating event-name
-literals. Event payloads remain ordinary JSON-compatible dictionaries.
+literals. Core event payload keys (node ID, stage, phase, call ID, outcome,
+and the rest) are likewise defined once in `TracePayloadKeys`, so producers
+and consumers cannot drift on the magic strings they share. Both contracts are
+key/name definitions only: event payloads remain ordinary JSON-compatible
+dictionaries and the serialized trace exposes no implementation type names.
+(The resolved-plan projection inside `pattern.started`/`pattern.completed`
+mirrors the `run.json` plan structure rather than these flat event keys.)
 
 `trace.json` uses schema version `1`. Every event has a contiguous,
 monotonically increasing `sequence` beginning at `1`. `JsonTraceReader` is the

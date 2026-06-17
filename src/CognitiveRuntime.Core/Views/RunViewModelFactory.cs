@@ -250,7 +250,7 @@ public static class RunViewModelFactory
                 GetDataString(traceEvent, "category") ?? "Unknown",
                 GetDataBoolean(traceEvent, "allowed") ? "Allowed" : "Blocked",
                 GetDataString(traceEvent, "reason") ?? "No reason recorded.",
-                GetDataString(traceEvent, "phase") ?? "Not recorded"))
+                GetDataString(traceEvent, TracePayloadKeys.Phase) ?? "Not recorded"))
             .ToArray();
 
     private static int CountPhaseEvents(
@@ -260,7 +260,7 @@ public static class RunViewModelFactory
         traceEvents.Count(traceEvent =>
             string.Equals(traceEvent.Type, eventType, StringComparison.Ordinal) &&
             string.Equals(
-                GetDataString(traceEvent, "phase"),
+                GetDataString(traceEvent, TracePayloadKeys.Phase),
                 phaseName,
                 StringComparison.OrdinalIgnoreCase));
 
