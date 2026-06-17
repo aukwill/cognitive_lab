@@ -2138,6 +2138,8 @@ Acceptance:
 
 Priority: `P1`
 
+Status: Complete.
+
 Motivation: Without CI, the "tests pass without credentials" guarantee relies on
 local discipline alone.
 

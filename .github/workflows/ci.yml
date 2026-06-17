@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# No secrets are used or needed; the build and tests run credential-free.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build and test (credential-free)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # These mirror the documented local commands in README.md.
+      - name: Restore
+        run: dotnet restore --configfile NuGet.Config
+
+      - name: Test
+        run: dotnet test CognitiveRuntime.slnx --no-restore
+
+      # Generated run output must never be committed. outputs/ is gitignored
+      # (except outputs/.gitkeep); fail loudly if anything else slips in.
+      - name: Verify no run output is tracked
+        run: |
+          tracked=$(git ls-files 'outputs/' | grep -v '^outputs/.gitkeep$' || true)
+          if [ -n "$tracked" ]; then
+            echo "Unexpected tracked files under outputs/:"
+            echo "$tracked"
+            exit 1
+          fi

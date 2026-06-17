@@ -19,6 +19,13 @@ dotnet restore --configfile NuGet.Config
 dotnet test CognitiveRuntime.slnx --no-restore
 ```
 
+## Continuous Integration
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the same two commands above on
+every push to `main` and on every pull request. The build and tests are
+credential-free: no secrets are configured or required, and the job fails if any
+generated `outputs/` content is ever committed.
+
 ## Run Mock Mode
 
 Command Prompt:
