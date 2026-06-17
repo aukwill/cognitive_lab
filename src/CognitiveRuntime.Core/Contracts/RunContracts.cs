@@ -9,7 +9,8 @@ public sealed record RunRequest(
     string? InputSource = null,
     string? Lens = null,
     string Pattern = "critic-revision",
-    IReadOnlyList<string>? PipelineStages = null);
+    IReadOnlyList<string>? PipelineStages = null,
+    IReadOnlyList<string>? ScatterModes = null);
 
 /// <summary>
 /// The terminal outcome of a run. The runtime, not the model, decides this

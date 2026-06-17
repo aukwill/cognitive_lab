@@ -16,7 +16,8 @@ internal sealed record CliOptions(
     string? Experiment = null,
     string ExperimentsRoot = "",
     string? Brief = null,
-    string? FlareGameRoot = null)
+    string? FlareGameRoot = null,
+    IReadOnlyList<string>? ScatterModes = null)
 {
     public const string DungeonBuilderBrief =
         "Build a compact crypt with an entrance, three to six rooms, one " +
@@ -24,7 +25,7 @@ internal sealed record CliOptions(
         "reachable exit.";
 
     private static readonly HashSet<string> KnownPatterns = new(
-        ["single-pass", "critic-revision", "linear-pipeline"],
+        ["single-pass", "critic-revision", "linear-pipeline", "scatter-gather"],
         StringComparer.OrdinalIgnoreCase);
 
     private static readonly HashSet<string> KnownExperiments = new(
@@ -126,7 +127,7 @@ internal sealed record CliOptions(
                 $"Unknown pattern '{pattern}'. Available patterns: {available}.");
         }
 
-        var pipelineStages = ParsePipelineStages(values);
+        var pipelineStages = ParseModeList(values, "--pipeline");
         var isLinearPipeline = string.Equals(
             pattern, "linear-pipeline", StringComparison.OrdinalIgnoreCase);
 
@@ -140,6 +141,22 @@ internal sealed record CliOptions(
         {
             throw new CliUsageException(
                 "'--pipeline' requires '--pattern linear-pipeline'.");
+        }
+
+        var scatterModes = ParseModeList(values, "--scatter");
+        var isScatterGather = string.Equals(
+            pattern, "scatter-gather", StringComparison.OrdinalIgnoreCase);
+
+        if (isScatterGather && scatterModes is null)
+        {
+            throw new CliUsageException(
+                "'--pattern scatter-gather' requires '--scatter <mode,mode,...>'.");
+        }
+
+        if (!isScatterGather && scatterModes is not null)
+        {
+            throw new CliUsageException(
+                "'--scatter' requires '--pattern scatter-gather'.");
         }
 
         var mode = isLinearPipeline
@@ -167,29 +184,31 @@ internal sealed record CliOptions(
             ShowHelp: false,
             Lens: string.IsNullOrWhiteSpace(lens) ? null : lens,
             Pattern: pattern,
-            PipelineStages: pipelineStages);
+            PipelineStages: pipelineStages,
+            ScatterModes: scatterModes);
     }
 
-    private static IReadOnlyList<string>? ParsePipelineStages(
-        IReadOnlyDictionary<string, string> values)
+    private static IReadOnlyList<string>? ParseModeList(
+        IReadOnlyDictionary<string, string> values,
+        string option)
     {
-        if (!values.TryGetValue("--pipeline", out var rawValue))
+        if (!values.TryGetValue(option, out var rawValue))
         {
             return null;
         }
 
-        var stages = rawValue
+        var modes = rawValue
             .Split(',', StringSplitOptions.TrimEntries)
             .ToArray();
 
-        if (stages.Any(string.IsNullOrEmpty))
+        if (modes.Any(string.IsNullOrEmpty))
         {
             throw new CliUsageException(
-                "'--pipeline' must be a comma-separated list of mode names " +
+                $"'{option}' must be a comma-separated list of mode names " +
                 "with no empty entries.");
         }
 
-        return stages;
+        return modes;
     }
 
     private static bool IsHelpFlag(string value) =>
@@ -210,6 +229,7 @@ internal sealed record CliOptions(
                 "--lens",
                 "--pattern",
                 "--pipeline",
+                "--scatter",
                 "--experiment",
                 "--experiments-root",
                 "--brief",

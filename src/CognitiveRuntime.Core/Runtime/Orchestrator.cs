@@ -63,7 +63,8 @@ public sealed class Orchestrator
             new PatternPlanRequest(
                 request.ModeName,
                 request.Lens,
-                request.PipelineStages));
+                request.PipelineStages,
+                request.ScatterModes));
         _planValidator.Validate(plan);
 
         var runId = _runIdGenerator.GenerateRunId();

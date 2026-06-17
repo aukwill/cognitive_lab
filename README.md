@@ -149,6 +149,15 @@ ends the run as a terminal budget failure.
   fixed at construction; the model cannot add, remove, reorder, or repeat
   stages. Each stage writes `input.md` and `result.md` under
   `stages/NN-<mode>/`.
+- `scatter-gather` - runs a fixed set of independent branch modes, set with
+  `--scatter <mode,mode,...>`, then gathers their typed outputs into one
+  authoritative synthesis node (the `--mode` mode). Branch count and modes are
+  fixed by the plan; the model cannot add branches or skip the gather. The
+  gather reads every branch in declared order, so a missing branch fails
+  context assembly rather than being silently dropped. Branches are independent
+  by construction and currently execute in declared order; bounded concurrent
+  execution is a documented follow-up
+  ([`RB-008`](docs/research/RB-008-bounded-scatter-gather.md)).
 
 ```powershell
 dotnet run --project src/CognitiveRuntime.Cli -- `

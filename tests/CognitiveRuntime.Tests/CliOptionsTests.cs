@@ -27,6 +27,57 @@ public sealed class CliOptionsTests
     }
 
     [Fact]
+    public void Parse_AcceptsScatterGatherOption()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+
+        var options = CliOptions.Parse(
+            [
+                "--pattern", "scatter-gather",
+                "--mode", "synthesize",
+                "--scatter", "frame, challenge",
+                "--input", "input.txt",
+                "--run-mode", "mock"
+            ],
+            configuration);
+
+        Assert.Equal("scatter-gather", options.Pattern);
+        Assert.Equal(["frame", "challenge"], options.ScatterModes);
+    }
+
+    [Fact]
+    public void Parse_ScatterGatherWithoutScatterModes_Throws()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+
+        var exception = Assert.Throws<CliUsageException>(() => CliOptions.Parse(
+            [
+                "--pattern", "scatter-gather",
+                "--mode", "synthesize",
+                "--input", "input.txt"
+            ],
+            configuration));
+
+        Assert.Contains("--scatter", exception.Message);
+    }
+
+    [Fact]
+    public void Parse_ScatterWithoutScatterGatherPattern_Throws()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+
+        var exception = Assert.Throws<CliUsageException>(() => CliOptions.Parse(
+            [
+                "--mode", "frame",
+                "--scatter", "frame,challenge",
+                "--input", "input.txt"
+            ],
+            configuration));
+
+        Assert.Contains("scatter-gather", exception.Message);
+    }
+
+    [Fact]
     public void Parse_AcceptsLensOption()
     {
         var configuration = new ConfigurationBuilder().Build();

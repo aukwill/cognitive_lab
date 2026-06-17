@@ -44,7 +44,8 @@ internal static class RuntimeTestHarness
                 [
                     new CriticRevisionPattern(),
                     new SinglePassPattern(),
-                    new LinearPipelinePattern()
+                    new LinearPipelinePattern(),
+                    new ScatterGatherPattern()
                 ]),
             new PatternExecutionPlanValidator(),
             new PatternExecutor(

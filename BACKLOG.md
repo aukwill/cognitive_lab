@@ -2433,10 +2433,12 @@ Guardrails:
 
 ### RB-008 - Bounded scatter-gather orchestration
 
-Research status: `complete` on 2026-06-17. Disposition: promote to the catalog
-as a new registered pattern; implementation deferred until `RS-006` (execution
-budgets) lands. The only new runtime work is bounded concurrent execution of
-independent nodes in the shared executor.
+Research status: `complete` on 2026-06-17. Disposition: promoted and
+implemented. The `scatter-gather` pattern is registered in the catalog
+(`--pattern scatter-gather --scatter <mode,mode,...>`) on top of `RS-006`
+execution budgets. Branches execute in declared order through the shared
+executor; bounded concurrent execution of independent nodes remains the one
+documented follow-up.
 
 Design note:
 [`docs/research/RB-008-bounded-scatter-gather.md`](docs/research/RB-008-bounded-scatter-gather.md)

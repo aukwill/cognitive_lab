@@ -10,7 +10,8 @@ public enum PatternNodeKind
 public sealed record PatternPlanRequest(
     string ModeName,
     string? Lens,
-    IReadOnlyList<string>? PipelineStages);
+    IReadOnlyList<string>? PipelineStages,
+    IReadOnlyList<string>? ScatterModes = null);
 
 public sealed record PatternModeSource(
     string Id,

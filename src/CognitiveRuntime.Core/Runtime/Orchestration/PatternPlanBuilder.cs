@@ -110,6 +110,75 @@ internal static class PatternPlanBuilder
                 EvaluateLoopEfficacy: true));
     }
 
+    public static PatternExecutionPlan CreateScatterGather(
+        string patternName,
+        PatternPlanRequest request)
+    {
+        ValidateModeName(request.ModeName);
+
+        var branchModes = request.ScatterModes;
+        if (branchModes is null || branchModes.Count == 0)
+        {
+            throw new ArgumentException(
+                "Scatter-gather requires at least one scatter mode.",
+                nameof(request));
+        }
+
+        if (branchModes.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new ArgumentException(
+                "Scatter mode names cannot be null or blank.",
+                nameof(request));
+        }
+
+        var modeSources = new List<PatternModeSource>(branchModes.Count + 1);
+        var nodes = new List<PatternExecutionNode>(branchModes.Count + 1);
+        var branchIds = new List<string>(branchModes.Count);
+
+        for (var index = 0; index < branchModes.Count; index++)
+        {
+            var branchId = $"branch-{index + 1:D2}";
+            modeSources.Add(new PatternModeSource(branchId, branchModes[index]));
+            // Branches are independent by construction: no dependency or context
+            // edge to one another, so the runtime is free to run them in any
+            // order (and, in a later revision, concurrently).
+            nodes.Add(
+                new PatternExecutionNode(
+                    branchId,
+                    PatternNodeKind.Phase,
+                    branchId,
+                    PhaseKind.Main,
+                    [],
+                    []));
+            branchIds.Add(branchId);
+        }
+
+        const string gatherSourceId = "gather";
+        const string gatherId = "gather";
+        modeSources.Add(
+            new PatternModeSource(gatherSourceId, request.ModeName, request.Lens));
+        // The gather depends on (and reads) every branch output, in declared
+        // order, so context assembly is deterministic regardless of completion
+        // order, and a missing branch fails context assembly rather than being
+        // silently dropped.
+        nodes.Add(
+            new PatternExecutionNode(
+                gatherId,
+                PatternNodeKind.Phase,
+                gatherSourceId,
+                PhaseKind.Main,
+                branchIds,
+                branchIds));
+
+        return new PatternExecutionPlan(
+            patternName,
+            modeSources,
+            nodes,
+            [],
+            gatherId,
+            new PatternEvalProfile([gatherId], EvaluateLoopEfficacy: false));
+    }
+
     private static IReadOnlyList<PatternExecutionNode> CreateCriticRevisionNodes(
         string modeSourceId,
         string idPrefix = "",

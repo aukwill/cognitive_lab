@@ -127,7 +127,8 @@ internal sealed class CliApplication
                 options.InputPath,
                 options.Lens,
                 options.Pattern,
-                options.PipelineStages),
+                options.PipelineStages,
+                options.ScatterModes),
             cancellationToken);
 
         Console.WriteLine($"Run ID: {result.RunId}");
@@ -252,6 +253,7 @@ internal sealed class CliApplication
         services.AddSingleton<IOrchestrationPattern, CriticRevisionPattern>();
         services.AddSingleton<IOrchestrationPattern, SinglePassPattern>();
         services.AddSingleton<IOrchestrationPattern, LinearPipelinePattern>();
+        services.AddSingleton<IOrchestrationPattern, ScatterGatherPattern>();
         services.AddSingleton<IOrchestrationPatternFactory, OrchestrationPatternFactory>();
 
         services.AddSingleton<IModelClient, MockModelClient>();
