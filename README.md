@@ -1,5 +1,7 @@
 # Cognitive Agent Runtime Lab
 
+[![CI](https://github.com/aukwill/cognitive_lab/actions/workflows/ci.yml/badge.svg)](https://github.com/aukwill/cognitive_lab/actions/workflows/ci.yml)
+
 A local-first C#/.NET environment for running, comparing, and inspecting
 bounded agent orchestration patterns. The runtime owns the loop; the model
 only performs reasoning inside the steps it is assigned. It is intentionally
