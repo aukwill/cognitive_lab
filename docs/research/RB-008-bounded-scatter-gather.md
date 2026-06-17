@@ -1,8 +1,19 @@
 # RB-008: Bounded Scatter-Gather Orchestration
 
-Status: Research complete; implementation deferred (gated on `RS-006`)
+Status: Research complete; implemented on `RS-006`
 
 Date: 2026-06-17
+
+## Implementation Note
+
+Implemented as the `scatter-gather` pattern. The executor runs the plan in
+bounded dependency waves: independent nodes in a wave execute concurrently
+(capped by a runtime concurrency limit), and results are committed in declared
+order so output is deterministic regardless of completion order. The trace
+session was already concurrency-safe; the execution-node tracker was made
+concurrency-safe. A barrier test proves branches genuinely overlap. The
+`scatter/NN-<mode>/` per-branch artifact layout (versus the flat `phases/`
+numbering) remains the one deferred refinement.
 
 ## Decision
 

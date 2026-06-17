@@ -50,6 +50,9 @@ internal static class ExecutionNodeStateFactory
 
 internal sealed class ExecutionNodeStateTracker
 {
+    // Guards all reads and writes so independent nodes can execute concurrently
+    // (scatter-gather) without racing on node-state transitions.
+    private readonly object _sync = new();
     private readonly TimeProvider _timeProvider;
     private readonly Dictionary<string, int> _indexes;
     private readonly ExecutionNodeState[] _states;
@@ -65,8 +68,16 @@ internal sealed class ExecutionNodeStateTracker
             .ToDictionary(item => item.NodeId, item => item.index, StringComparer.Ordinal);
     }
 
-    public ImmutableArray<ExecutionNodeState> Snapshot =>
-        ImmutableArray.CreateRange(_states);
+    public ImmutableArray<ExecutionNodeState> Snapshot
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return ImmutableArray.CreateRange(_states);
+            }
+        }
+    }
 
     public void Start(
         string nodeId,
@@ -74,93 +85,108 @@ internal sealed class ExecutionNodeStateTracker
         string modeName,
         string provider)
     {
-        var index = GetIndex(nodeId);
-        var current = _states[index];
-        RequireStatus(current, ExecutionNodeStatus.Pending);
-        _states[index] = current with
+        lock (_sync)
         {
-            PhaseName = phaseName,
-            ModeName = modeName,
-            Status = ExecutionNodeStatus.Running,
-            Provider = provider,
-            StartedAt = _timeProvider.GetUtcNow()
-        };
+            var index = GetIndex(nodeId);
+            var current = _states[index];
+            RequireStatus(current, ExecutionNodeStatus.Pending);
+            _states[index] = current with
+            {
+                PhaseName = phaseName,
+                ModeName = modeName,
+                Status = ExecutionNodeStatus.Running,
+                Provider = provider,
+                StartedAt = _timeProvider.GetUtcNow()
+            };
+        }
     }
 
     public void Complete(string nodeId, PhaseResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
 
-        var index = GetIndex(nodeId);
-        var current = _states[index];
-        RequireStatus(current, ExecutionNodeStatus.Running);
-        _states[index] = current with
+        lock (_sync)
         {
-            Status = ExecutionNodeStatus.Completed,
-            Provider = result.Provider,
-            Model = result.Model,
-            EndedAt = _timeProvider.GetUtcNow(),
-            OutputLength = result.Content.Length
-        };
+            var index = GetIndex(nodeId);
+            var current = _states[index];
+            RequireStatus(current, ExecutionNodeStatus.Running);
+            _states[index] = current with
+            {
+                Status = ExecutionNodeStatus.Completed,
+                Provider = result.Provider,
+                Model = result.Model,
+                EndedAt = _timeProvider.GetUtcNow(),
+                OutputLength = result.Content.Length
+            };
+        }
     }
 
     public void Fail(string nodeId)
     {
-        var index = GetIndex(nodeId);
-        var current = _states[index];
-        RequireStatus(current, ExecutionNodeStatus.Running);
-        _states[index] = current with
+        lock (_sync)
         {
-            Status = ExecutionNodeStatus.Failed,
-            EndedAt = _timeProvider.GetUtcNow()
-        };
+            var index = GetIndex(nodeId);
+            var current = _states[index];
+            RequireStatus(current, ExecutionNodeStatus.Running);
+            _states[index] = current with
+            {
+                Status = ExecutionNodeStatus.Failed,
+                EndedAt = _timeProvider.GetUtcNow()
+            };
+        }
     }
 
     public bool CancelUnfinished()
     {
-        var changed = false;
-        var endedAt = _timeProvider.GetUtcNow();
-        for (var index = 0; index < _states.Length; index++)
+        lock (_sync)
         {
-            var current = _states[index];
-            if (current.Status is not (
-                ExecutionNodeStatus.Pending or ExecutionNodeStatus.Running))
+            var changed = false;
+            var endedAt = _timeProvider.GetUtcNow();
+            for (var index = 0; index < _states.Length; index++)
             {
-                continue;
+                var current = _states[index];
+                if (current.Status is not (
+                    ExecutionNodeStatus.Pending or ExecutionNodeStatus.Running))
+                {
+                    continue;
+                }
+
+                _states[index] = current with
+                {
+                    Status = ExecutionNodeStatus.Cancelled,
+                    EndedAt = endedAt
+                };
+                changed = true;
             }
 
-            _states[index] = current with
-            {
-                Status = ExecutionNodeStatus.Cancelled,
-                EndedAt = endedAt
-            };
-            changed = true;
+            return changed;
         }
-
-        return changed;
     }
 
     public bool CancelPending()
     {
-        var changed = false;
-        var endedAt = _timeProvider.GetUtcNow();
-        for (var index = 0; index < _states.Length; index++)
+        lock (_sync)
         {
-            var current = _states[index];
-            if (current.Status != ExecutionNodeStatus.Pending)
+            var changed = false;
+            var endedAt = _timeProvider.GetUtcNow();
+            for (var index = 0; index < _states.Length; index++)
             {
-                continue;
+                var current = _states[index];
+                if (current.Status != ExecutionNodeStatus.Pending)
+                {
+                    continue;
+                }
+
+                _states[index] = current with
+                {
+                    Status = ExecutionNodeStatus.Cancelled,
+                    EndedAt = endedAt
+                };
+                changed = true;
             }
 
-            _states[index] = current with
-            {
-                Status = ExecutionNodeStatus.Cancelled,
-                EndedAt = endedAt
-            };
-            changed = true;
+            return changed;
         }
-
-        return changed;
     }
 
     private int GetIndex(string nodeId)

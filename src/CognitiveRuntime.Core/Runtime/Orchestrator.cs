@@ -143,6 +143,9 @@ public sealed class Orchestrator
                 cancellationToken);
 
             var modelClient = _modelClientFactory.Resolve(request.ModelProvider);
+            // Independent nodes may run concurrently, so guard the captured run
+            // state against concurrent node-state updates.
+            var executionStateLock = new object();
             var execution = await _patternExecutor.ExecuteAsync(
                 state.RunId,
                 request.Input,
@@ -151,9 +154,14 @@ public sealed class Orchestrator
                 state.Artifacts,
                 trace,
                 nodeStates =>
-                    state = RunStateUpdates.UpdateExecutionNodes(
-                        state,
-                        nodeStates),
+                {
+                    lock (executionStateLock)
+                    {
+                        state = RunStateUpdates.UpdateExecutionNodes(
+                            state,
+                            nodeStates);
+                    }
+                },
                 budgetEnforcer,
                 cancellationToken);
             state = RunStateUpdates.CompleteExecution(state, execution);

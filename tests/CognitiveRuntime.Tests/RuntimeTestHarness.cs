@@ -24,7 +24,8 @@ internal static class RuntimeTestHarness
         IRunStateStore? runStateStore = null,
         IArtifactStore? artifactStore = null,
         IRunIdGenerator? runIdGenerator = null,
-        RunBudget? budget = null)
+        RunBudget? budget = null,
+        int maxBranchConcurrency = 0)
     {
         IModelClient[] modelClients = [modelClient ?? new MockModelClient()];
         runStateStore ??= new NullRunStateStore();
@@ -52,7 +53,8 @@ internal static class RuntimeTestHarness
                 modeLoader,
                 phaseRunner,
                 artifactWriter,
-                timeProvider),
+                timeProvider,
+                maxBranchConcurrency),
             runStateStore,
             timeProvider,
             runIdGenerator,

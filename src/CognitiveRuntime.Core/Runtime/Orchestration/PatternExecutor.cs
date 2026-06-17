@@ -10,17 +10,22 @@ public sealed class PatternExecutor
     private readonly PhaseRunner _phaseRunner;
     private readonly IArtifactWriter _artifactWriter;
     private readonly TimeProvider _timeProvider;
+    private readonly int _maxBranchConcurrency;
 
     public PatternExecutor(
         IModeLoader modeLoader,
         PhaseRunner phaseRunner,
         IArtifactWriter artifactWriter,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        int maxBranchConcurrency = 0)
     {
         _modeLoader = modeLoader;
         _phaseRunner = phaseRunner;
         _artifactWriter = artifactWriter;
         _timeProvider = timeProvider;
+        _maxBranchConcurrency = maxBranchConcurrency > 0
+            ? maxBranchConcurrency
+            : Environment.ProcessorCount;
     }
 
     public async Task<PatternExecutionResult> ExecuteAsync(
@@ -51,13 +56,17 @@ public sealed class PatternExecutor
 
             if (plan.Stages.Count == 0)
             {
-                foreach (var node in plan.Nodes)
+                // Execute the plan in dependency waves. A wave holds nodes whose
+                // dependencies are all satisfied by earlier waves, so a wave's
+                // nodes are independent and may run concurrently. Single-node
+                // waves (single-pass, critic-revision) run inline, preserving
+                // their existing sequential trace order exactly.
+                foreach (var wave in BuildWaves(plan.Nodes))
                 {
-                    await EnforcePreCallBudgetAsync(budget, cancellationToken);
-                    var result = await ExecuteNodeAsync(
+                    var waveResults = await ExecuteWaveAsync(
+                        wave,
                         runId,
                         initialInput,
-                        node,
                         loadedModes,
                         phasesByNodeId,
                         resultsByNodeId,
@@ -65,13 +74,16 @@ public sealed class PatternExecutor
                         trace,
                         nodeStates,
                         nodeStatesChanged,
-                        cancellationToken);
-                    await EnforcePhaseOutputBudgetAsync(
                         budget,
-                        result,
                         cancellationToken);
-                    resultsByNodeId.Add(node.Id, result);
-                    orderedResults.Add(result);
+
+                    // Commit results in declared order, never completion order,
+                    // so context assembly and artifacts stay deterministic.
+                    foreach (var result in waveResults)
+                    {
+                        resultsByNodeId.Add(result.Node.Id, result);
+                        orderedResults.Add(result);
+                    }
                 }
             }
             else
@@ -420,6 +432,169 @@ public sealed class PatternExecutor
                 GetUpdatedStates(nodeStates, pending));
             throw;
         }
+    }
+
+    // Groups nodes into dependency waves: wave 0 holds nodes with no
+    // dependencies; each later wave holds nodes whose dependencies all resolved
+    // in earlier waves. Declared order is preserved within a wave. Dependencies
+    // reference only prior nodes (enforced by the plan validator), so every
+    // referenced wave index is already known.
+    private static IReadOnlyList<IReadOnlyList<PatternExecutionNode>> BuildWaves(
+        IReadOnlyList<PatternExecutionNode> nodes)
+    {
+        var waveByNodeId = new Dictionary<string, int>(StringComparer.Ordinal);
+        var maxWave = 0;
+        foreach (var node in nodes)
+        {
+            var wave = node.DependencyNodeIds.Count == 0
+                ? 0
+                : node.DependencyNodeIds.Max(
+                    dependencyId => waveByNodeId[dependencyId]) + 1;
+            waveByNodeId[node.Id] = wave;
+            maxWave = Math.Max(maxWave, wave);
+        }
+
+        var waves = new List<PatternExecutionNode>[maxWave + 1];
+        for (var index = 0; index <= maxWave; index++)
+        {
+            waves[index] = [];
+        }
+
+        foreach (var node in nodes)
+        {
+            waves[waveByNodeId[node.Id]].Add(node);
+        }
+
+        return waves;
+    }
+
+    private async Task<IReadOnlyList<PatternNodeExecutionResult>> ExecuteWaveAsync(
+        IReadOnlyList<PatternExecutionNode> wave,
+        string runId,
+        string initialInput,
+        IReadOnlyDictionary<string, LoadedMode> loadedModes,
+        IReadOnlyDictionary<string, LoadedPhase> phasesByNodeId,
+        IReadOnlyDictionary<string, PatternNodeExecutionResult> completedResults,
+        IModelClient modelClient,
+        ITraceSession trace,
+        ExecutionNodeStateTracker nodeStates,
+        Action<IReadOnlyList<ExecutionNodeState>>? nodeStatesChanged,
+        RunBudgetEnforcer? budget,
+        CancellationToken cancellationToken)
+    {
+        if (wave.Count == 1)
+        {
+            return
+            [
+                await RunWaveNodeAsync(
+                    wave[0],
+                    runId,
+                    initialInput,
+                    loadedModes,
+                    phasesByNodeId,
+                    completedResults,
+                    modelClient,
+                    trace,
+                    nodeStates,
+                    nodeStatesChanged,
+                    budget,
+                    cancellationToken)
+            ];
+        }
+
+        using var gate = new SemaphoreSlim(
+            Math.Min(_maxBranchConcurrency, wave.Count));
+        var tasks = new Task<PatternNodeExecutionResult>[wave.Count];
+        for (var index = 0; index < wave.Count; index++)
+        {
+            var node = wave[index];
+            tasks[index] = RunGatedWaveNodeAsync(
+                gate,
+                node,
+                runId,
+                initialInput,
+                loadedModes,
+                phasesByNodeId,
+                completedResults,
+                modelClient,
+                trace,
+                nodeStates,
+                nodeStatesChanged,
+                budget,
+                cancellationToken);
+        }
+
+        // Task.WhenAll preserves input order, so results stay in declared order.
+        return await Task.WhenAll(tasks);
+    }
+
+    private async Task<PatternNodeExecutionResult> RunGatedWaveNodeAsync(
+        SemaphoreSlim gate,
+        PatternExecutionNode node,
+        string runId,
+        string initialInput,
+        IReadOnlyDictionary<string, LoadedMode> loadedModes,
+        IReadOnlyDictionary<string, LoadedPhase> phasesByNodeId,
+        IReadOnlyDictionary<string, PatternNodeExecutionResult> completedResults,
+        IModelClient modelClient,
+        ITraceSession trace,
+        ExecutionNodeStateTracker nodeStates,
+        Action<IReadOnlyList<ExecutionNodeState>>? nodeStatesChanged,
+        RunBudgetEnforcer? budget,
+        CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            return await RunWaveNodeAsync(
+                node,
+                runId,
+                initialInput,
+                loadedModes,
+                phasesByNodeId,
+                completedResults,
+                modelClient,
+                trace,
+                nodeStates,
+                nodeStatesChanged,
+                budget,
+                cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<PatternNodeExecutionResult> RunWaveNodeAsync(
+        PatternExecutionNode node,
+        string runId,
+        string initialInput,
+        IReadOnlyDictionary<string, LoadedMode> loadedModes,
+        IReadOnlyDictionary<string, LoadedPhase> phasesByNodeId,
+        IReadOnlyDictionary<string, PatternNodeExecutionResult> completedResults,
+        IModelClient modelClient,
+        ITraceSession trace,
+        ExecutionNodeStateTracker nodeStates,
+        Action<IReadOnlyList<ExecutionNodeState>>? nodeStatesChanged,
+        RunBudgetEnforcer? budget,
+        CancellationToken cancellationToken)
+    {
+        await EnforcePreCallBudgetAsync(budget, cancellationToken);
+        var result = await ExecuteNodeAsync(
+            runId,
+            initialInput,
+            node,
+            loadedModes,
+            phasesByNodeId,
+            completedResults,
+            modelClient,
+            trace,
+            nodeStates,
+            nodeStatesChanged,
+            cancellationToken);
+        await EnforcePhaseOutputBudgetAsync(budget, result, cancellationToken);
+        return result;
     }
 
     // Budget checks run here, in the runtime executor, never inside a model

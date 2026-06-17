@@ -1,5 +1,7 @@
 using System.Text.Json;
+using CognitiveRuntime.Core.Abstractions;
 using CognitiveRuntime.Core.Contracts;
+using CognitiveRuntime.Core.Models;
 using static CognitiveRuntime.Tests.RuntimeTestHarness;
 
 namespace CognitiveRuntime.Tests;
@@ -70,6 +72,35 @@ public sealed class ScatterGatherPatternTests
     }
 
     [Fact]
+    public async Task RunAsync_RunsIndependentBranchesConcurrently()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.CreateMode();
+        // The probe blocks each branch call until both are in flight, so the run
+        // can only complete if the two branches execute concurrently. If they
+        // ran sequentially the first call would wait forever (its timeout would
+        // surface as a run failure rather than a hang).
+        var probe = new ConcurrencyProbeClient(expectedConcurrency: 2);
+        var orchestrator = CreateOrchestrator(
+            workspace,
+            FixedTime(),
+            probe,
+            maxBranchConcurrency: 2);
+
+        var result = await orchestrator.RunAsync(
+            new RunRequest(
+                "frame",
+                "Branches should overlap.",
+                "concurrency-probe",
+                workspace.OutputRoot,
+                Pattern: "scatter-gather",
+                ScatterModes: ["frame", "frame"]));
+
+        Assert.Equal(RunOutcome.Success, result.Outcome);
+        Assert.Equal(2, probe.MaxObservedConcurrency);
+    }
+
+    [Fact]
     public async Task RunAsync_ScatterGatherSerializationIsDeterministic()
     {
         using var firstWorkspace = new TestWorkspace();
@@ -103,5 +134,54 @@ public sealed class ScatterGatherPatternTests
                 Path.Combine(firstResult.OutputDirectory, "run.json")),
             await File.ReadAllTextAsync(
                 Path.Combine(secondResult.OutputDirectory, "run.json")));
+    }
+
+    // Releases each call only once `expectedConcurrency` calls are simultaneously
+    // in flight, so it both forces and measures branch overlap. The barrier wait
+    // has a timeout so a regression to sequential execution fails the test
+    // instead of hanging it.
+    private sealed class ConcurrencyProbeClient(int expectedConcurrency) : IModelClient
+    {
+        private readonly MockModelClient _inner = new();
+        private readonly TaskCompletionSource _allArrived =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly object _sync = new();
+        private int _arrived;
+        private int _inFlight;
+
+        public string ProviderName => "concurrency-probe";
+
+        public int MaxObservedConcurrency { get; private set; }
+
+        public async Task<ModelResponse> CompleteAsync(
+            ModelRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            lock (_sync)
+            {
+                _inFlight++;
+                MaxObservedConcurrency = Math.Max(MaxObservedConcurrency, _inFlight);
+                if (++_arrived >= expectedConcurrency)
+                {
+                    _allArrived.TrySetResult();
+                }
+            }
+
+            try
+            {
+                await _allArrived.Task.WaitAsync(
+                    TimeSpan.FromSeconds(10),
+                    cancellationToken);
+                var response = await _inner.CompleteAsync(request, cancellationToken);
+                return response with { Provider = ProviderName };
+            }
+            finally
+            {
+                lock (_sync)
+                {
+                    _inFlight--;
+                }
+            }
+        }
     }
 }

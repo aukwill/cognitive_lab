@@ -2436,9 +2436,11 @@ Guardrails:
 Research status: `complete` on 2026-06-17. Disposition: promoted and
 implemented. The `scatter-gather` pattern is registered in the catalog
 (`--pattern scatter-gather --scatter <mode,mode,...>`) on top of `RS-006`
-execution budgets. Branches execute in declared order through the shared
-executor; bounded concurrent execution of independent nodes remains the one
-documented follow-up.
+execution budgets. The shared executor runs the plan in bounded dependency
+waves: a wave's independent nodes execute concurrently (capped) while results
+are committed in declared order, so output stays deterministic regardless of
+completion order. The trace session and execution-node tracker are
+concurrency-safe.
 
 Design note:
 [`docs/research/RB-008-bounded-scatter-gather.md`](docs/research/RB-008-bounded-scatter-gather.md)

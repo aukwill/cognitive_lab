@@ -154,9 +154,10 @@ ends the run as a terminal budget failure.
   authoritative synthesis node (the `--mode` mode). Branch count and modes are
   fixed by the plan; the model cannot add branches or skip the gather. The
   gather reads every branch in declared order, so a missing branch fails
-  context assembly rather than being silently dropped. Branches are independent
-  by construction and currently execute in declared order; bounded concurrent
-  execution is a documented follow-up
+  context assembly rather than being silently dropped. Independent branches run
+  concurrently (bounded by a runtime concurrency cap), while results are
+  assembled in declared order, so artifacts and context stay deterministic
+  regardless of completion order
   ([`RB-008`](docs/research/RB-008-bounded-scatter-gather.md)).
 
 ```powershell
