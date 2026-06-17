@@ -61,6 +61,7 @@ internal static partial class RuntimeFailureFactory
         RunLifecycleStatus lifecycleStatus) =>
         exception switch
         {
+            BudgetExceededException => RuntimeFailureCategory.Budget,
             ModelProviderException => RuntimeFailureCategory.Provider,
             ModeLoadException => RuntimeFailureCategory.Mode,
             RunStateStoreException => RuntimeFailureCategory.Persistence,

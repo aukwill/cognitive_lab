@@ -771,6 +771,8 @@ Acceptance:
 
 Priority: `P2`
 
+Status: Complete.
+
 Motivation: A run can consume unbounded input size, model calls, output length,
 or wall-clock time, so a misbehaving loop or pathological input has no
 runtime-enforced ceiling.

@@ -37,6 +37,8 @@ public static class TraceEventNames
     public const string EvalStarted = "eval.started";
     public const string EvalCompleted = "eval.completed";
 
+    public const string BudgetExceeded = "budget.exceeded";
+
     public const string ToolPolicyEvaluated = "tool.policy_evaluated";
     public const string ToolCalled = "tool.called";
     public const string ToolCompleted = "tool.completed";

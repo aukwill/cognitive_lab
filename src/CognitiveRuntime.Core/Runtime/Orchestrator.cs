@@ -22,6 +22,7 @@ public sealed class Orchestrator
     private readonly IRunStateStore _runStateStore;
     private readonly TimeProvider _timeProvider;
     private readonly IRunIdGenerator _runIdGenerator;
+    private readonly RunBudget _budget;
 
     public Orchestrator(
         IModelClientFactory modelClientFactory,
@@ -34,7 +35,8 @@ public sealed class Orchestrator
         PatternExecutor patternExecutor,
         IRunStateStore? runStateStore = null,
         TimeProvider? timeProvider = null,
-        IRunIdGenerator? runIdGenerator = null)
+        IRunIdGenerator? runIdGenerator = null,
+        RunBudget? budget = null)
     {
         _modelClientFactory = modelClientFactory;
         _artifactWriter = artifactWriter;
@@ -47,6 +49,7 @@ public sealed class Orchestrator
         _runStateStore = runStateStore ?? new NullRunStateStore();
         _timeProvider = timeProvider ?? TimeProvider.System;
         _runIdGenerator = runIdGenerator ?? new GuidRunIdGenerator();
+        _budget = budget ?? RunBudget.Default;
     }
 
     public async Task<RunResult> RunAsync(
@@ -76,6 +79,7 @@ public sealed class Orchestrator
             cancellationToken);
         var state = RunStateUpdates.Create(runId, plan, artifacts);
         var createdAt = _timeProvider.GetUtcNow();
+        var budgetEnforcer = new RunBudgetEnforcer(_budget, _timeProvider, trace);
 
         try
         {
@@ -104,6 +108,10 @@ public sealed class Orchestrator
                     [TracePayloadKeys.Pattern] = plan.PatternName,
                     [TracePayloadKeys.Stages] = GetStageModeNames(plan)
                 },
+                cancellationToken);
+
+            await budgetEnforcer.CheckInputAsync(
+                request.Input.Length,
                 cancellationToken);
 
             // Announce the artifacts the runtime is committed to producing. The
@@ -145,6 +153,7 @@ public sealed class Orchestrator
                     state = RunStateUpdates.UpdateExecutionNodes(
                         state,
                         nodeStates),
+                budgetEnforcer,
                 cancellationToken);
             state = RunStateUpdates.CompleteExecution(state, execution);
             await PersistRunAsync(

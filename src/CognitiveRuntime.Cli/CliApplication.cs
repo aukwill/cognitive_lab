@@ -197,6 +197,7 @@ internal sealed class CliApplication
                 }));
 
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(RunBudget.Default);
         services.AddSingleton<IRunIdGenerator, GuidRunIdGenerator>();
         services.AddSingleton<HttpClient>(
             _ => new HttpClient

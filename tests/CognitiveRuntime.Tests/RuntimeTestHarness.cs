@@ -23,7 +23,8 @@ internal static class RuntimeTestHarness
         IOrchestrationPatternFactory? patternFactory = null,
         IRunStateStore? runStateStore = null,
         IArtifactStore? artifactStore = null,
-        IRunIdGenerator? runIdGenerator = null)
+        IRunIdGenerator? runIdGenerator = null,
+        RunBudget? budget = null)
     {
         IModelClient[] modelClients = [modelClient ?? new MockModelClient()];
         runStateStore ??= new NullRunStateStore();
@@ -53,7 +54,8 @@ internal static class RuntimeTestHarness
                 timeProvider),
             runStateStore,
             timeProvider,
-            runIdGenerator);
+            runIdGenerator,
+            budget);
     }
 
     public static void AssertRequiredArtifactsExist(string outputDirectory)

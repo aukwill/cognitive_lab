@@ -125,6 +125,13 @@ throw before state changes, and `succeeded`, `failed`, and `cancelled` cannot
 transition again. A `succeeded` lifecycle means finalization completed; the
 separate run outcome remains either `success` or `evalFailed`.
 
+The runtime also enforces a fixed, typed `RunBudget` from outside the model
+clients: maximum input characters, model calls, phase output characters, and
+run duration. These are runtime-owned configuration the model cannot read or
+change; defaults are generous enough to leave normal runs untouched. A breach
+emits a `budget.exceeded` trace event carrying the limit and observed value and
+ends the run as a terminal budget failure.
+
 - `single-pass` - runs the mode's main phase only. Its output is the
   authoritative result.
 - `critic-revision` (default) - runs the bounded sequence

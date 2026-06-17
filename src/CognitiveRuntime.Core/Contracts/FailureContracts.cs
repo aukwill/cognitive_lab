@@ -8,6 +8,7 @@ public enum RuntimeFailureCategory
     Artifact,
     Persistence,
     Cancellation,
+    Budget,
     Runtime
 }
 

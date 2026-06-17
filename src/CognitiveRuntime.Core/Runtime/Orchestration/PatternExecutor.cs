@@ -31,6 +31,7 @@ public sealed class PatternExecutor
         RunArtifactPaths rootArtifacts,
         ITraceSession trace,
         Action<IReadOnlyList<ExecutionNodeState>>? nodeStatesChanged = null,
+        RunBudgetEnforcer? budget = null,
         CancellationToken cancellationToken = default)
     {
         var nodeStates = new ExecutionNodeStateTracker(plan, _timeProvider);
@@ -52,6 +53,7 @@ public sealed class PatternExecutor
             {
                 foreach (var node in plan.Nodes)
                 {
+                    await EnforcePreCallBudgetAsync(budget, cancellationToken);
                     var result = await ExecuteNodeAsync(
                         runId,
                         initialInput,
@@ -63,6 +65,10 @@ public sealed class PatternExecutor
                         trace,
                         nodeStates,
                         nodeStatesChanged,
+                        cancellationToken);
+                    await EnforcePhaseOutputBudgetAsync(
+                        budget,
+                        result,
                         cancellationToken);
                     resultsByNodeId.Add(node.Id, result);
                     orderedResults.Add(result);
@@ -101,6 +107,7 @@ public sealed class PatternExecutor
                                 candidate.Id,
                                 nodeId,
                                 StringComparison.Ordinal));
+                        await EnforcePreCallBudgetAsync(budget, cancellationToken);
                         var result = await ExecuteNodeAsync(
                             runId,
                             initialInput,
@@ -112,6 +119,10 @@ public sealed class PatternExecutor
                             trace,
                             nodeStates,
                             nodeStatesChanged,
+                            cancellationToken);
+                        await EnforcePhaseOutputBudgetAsync(
+                            budget,
+                            result,
                             cancellationToken);
                         resultsByNodeId.Add(node.Id, result);
                         orderedResults.Add(result);
@@ -409,6 +420,37 @@ public sealed class PatternExecutor
                 GetUpdatedStates(nodeStates, pending));
             throw;
         }
+    }
+
+    // Budget checks run here, in the runtime executor, never inside a model
+    // client. A breach throws before (or after) the node's model call and
+    // propagates as a terminal budget failure.
+    private static async Task EnforcePreCallBudgetAsync(
+        RunBudgetEnforcer? budget,
+        CancellationToken cancellationToken)
+    {
+        if (budget is null)
+        {
+            return;
+        }
+
+        await budget.CheckDurationAsync(cancellationToken);
+        await budget.BeforeModelCallAsync(cancellationToken);
+    }
+
+    private static async Task EnforcePhaseOutputBudgetAsync(
+        RunBudgetEnforcer? budget,
+        PatternNodeExecutionResult result,
+        CancellationToken cancellationToken)
+    {
+        if (budget is null)
+        {
+            return;
+        }
+
+        await budget.CheckPhaseOutputAsync(
+            result.PhaseResult.Content.Length,
+            cancellationToken);
     }
 
     private static void PublishNodeStates(

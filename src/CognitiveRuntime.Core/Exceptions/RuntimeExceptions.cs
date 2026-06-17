@@ -26,6 +26,25 @@ public sealed class ModelProviderException : Exception
     }
 }
 
+public sealed class BudgetExceededException : Exception
+{
+    public BudgetExceededException(string budgetKind, long limit, long observed)
+        : base(
+            $"Execution budget '{budgetKind}' exceeded: limit {limit}, " +
+            $"observed {observed}.")
+    {
+        BudgetKind = budgetKind;
+        Limit = limit;
+        Observed = observed;
+    }
+
+    public string BudgetKind { get; }
+
+    public long Limit { get; }
+
+    public long Observed { get; }
+}
+
 public sealed class RuntimeRunException : Exception
 {
     public RuntimeRunException(string message, string outputDirectory, Exception innerException)

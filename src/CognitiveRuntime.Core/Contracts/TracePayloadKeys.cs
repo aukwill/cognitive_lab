@@ -61,6 +61,11 @@ public static class TracePayloadKeys
     // Timing.
     public const string DurationMs = "durationMs";
 
+    // Execution budgets.
+    public const string BudgetKind = "budgetKind";
+    public const string Limit = "limit";
+    public const string Observed = "observed";
+
     // Sanitized failure information.
     public const string Category = "category";
     public const string ExceptionType = "exceptionType";

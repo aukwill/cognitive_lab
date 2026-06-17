@@ -261,6 +261,7 @@ stage.completed
 pattern.completed
 artifact.reserved
 artifact.written
+budget.exceeded
 eval.started
 eval.completed
 run.completed
