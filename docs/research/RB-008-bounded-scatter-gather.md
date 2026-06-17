@@ -11,9 +11,10 @@ bounded dependency waves: independent nodes in a wave execute concurrently
 (capped by a runtime concurrency limit), and results are committed in declared
 order so output is deterministic regardless of completion order. The trace
 session was already concurrency-safe; the execution-node tracker was made
-concurrency-safe. A barrier test proves branches genuinely overlap. The
-`scatter/NN-<mode>/` per-branch artifact layout (versus the flat `phases/`
-numbering) remains the one deferred refinement.
+concurrency-safe. A barrier test proves branches genuinely overlap. Each
+branch's phase output is grouped under `scatter/NN-<mode>/` via a data-only
+`ArtifactGroup` on the plan node, so the runtime honors the grouping without
+branching on the pattern name.
 
 ## Decision
 

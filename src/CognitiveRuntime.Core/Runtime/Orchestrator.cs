@@ -441,14 +441,33 @@ public sealed class Orchestrator
         var execution = state.Execution!;
         if (execution.Stages.Count == 0)
         {
-            await WritePhaseGroupAsync(
-                state.Artifacts,
-                state.Artifacts.RunDirectory,
-                execution.NodeResults
-                    .Select(node => node.PhaseResult)
-                    .ToArray(),
-                trace,
-                cancellationToken);
+            // A node's phase output goes under its declared artifact group when
+            // it has one (scatter-gather branches land in scatter/NN-<mode>/);
+            // ungrouped nodes use the run-root phases/ directory. Indices are
+            // per directory, in declared order.
+            var indexByDirectory = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var nodeResult in execution.NodeResults)
+            {
+                var group = nodeResult.Node.ArtifactGroup;
+                var baseDirectory = string.IsNullOrEmpty(group)
+                    ? state.Artifacts.RunDirectory
+                    : Path.Combine(state.Artifacts.RunDirectory, group);
+                var index = indexByDirectory.GetValueOrDefault(baseDirectory) + 1;
+                indexByDirectory[baseDirectory] = index;
+                var path = await _artifactWriter.WritePhaseAsync(
+                    state.Artifacts,
+                    baseDirectory,
+                    index,
+                    nodeResult.PhaseResult.PhaseName,
+                    nodeResult.PhaseResult.Content,
+                    cancellationToken);
+                await TracePhaseWrittenAsync(
+                    trace,
+                    state.Artifacts.RunDirectory,
+                    path,
+                    cancellationToken);
+            }
+
             return;
         }
 

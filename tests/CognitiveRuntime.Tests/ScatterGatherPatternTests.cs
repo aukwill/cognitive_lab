@@ -69,6 +69,21 @@ public sealed class ScatterGatherPatternTests
         Assert.Contains("declared plan execution", evalMarkdown);
         var resultMarkdown = await File.ReadAllTextAsync(result.ResultPath);
         Assert.Contains("## Problem", resultMarkdown);
+
+        // Each branch's phase output is grouped under scatter/NN-<mode>/; the
+        // gather's raw output stays in the run-root phases/ directory.
+        Assert.True(File.Exists(Path.Combine(
+            result.OutputDirectory, "scatter", "01-frame", "phases", "01-main.md")));
+        Assert.True(File.Exists(Path.Combine(
+            result.OutputDirectory, "scatter", "02-frame", "phases", "01-main.md")));
+        Assert.True(File.Exists(Path.Combine(
+            result.OutputDirectory, "phases", "01-main.md")));
+        Assert.Contains(
+            root.GetProperty("artifacts").EnumerateArray(),
+            artifact =>
+                artifact.GetProperty("relativePath").GetString() ==
+                "scatter/01-frame/phases/01-main.md" &&
+                artifact.GetProperty("kind").GetString() == "phaseOutput");
     }
 
     [Fact]

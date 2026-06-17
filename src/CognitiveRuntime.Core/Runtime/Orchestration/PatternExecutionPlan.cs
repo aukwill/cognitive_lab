@@ -26,7 +26,12 @@ public sealed record PatternExecutionNode(
     IReadOnlyList<string> DependencyNodeIds,
     IReadOnlyList<string> ContextNodeIds,
     string? InputNodeId = null,
-    string? StageId = null);
+    string? StageId = null,
+    // Optional relative directory (under the run directory) for this node's
+    // phase output. Lets a pattern group phase artifacts -- e.g. scatter-gather
+    // branches under scatter/NN-<mode>/ -- without the runtime branching on the
+    // pattern name. Null means the run-root phases/ directory.
+    string? ArtifactGroup = null);
 
 public sealed record PatternStage(
     string Id,

@@ -139,9 +139,14 @@ internal static class PatternPlanBuilder
         {
             var branchId = $"branch-{index + 1:D2}";
             modeSources.Add(new PatternModeSource(branchId, branchModes[index]));
+            var safeMode = new string(
+                branchModes[index]
+                    .Where(character =>
+                        char.IsAsciiLetterOrDigit(character) || character == '-')
+                    .ToArray());
             // Branches are independent by construction: no dependency or context
-            // edge to one another, so the runtime is free to run them in any
-            // order (and, in a later revision, concurrently).
+            // edge to one another, so the runtime runs them concurrently. Each
+            // branch's phase output is grouped under scatter/NN-<mode>/.
             nodes.Add(
                 new PatternExecutionNode(
                     branchId,
@@ -149,7 +154,8 @@ internal static class PatternPlanBuilder
                     branchId,
                     PhaseKind.Main,
                     [],
-                    []));
+                    [],
+                    ArtifactGroup: $"scatter/{index + 1:D2}-{safeMode}"));
             branchIds.Add(branchId);
         }
 

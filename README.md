@@ -157,7 +157,8 @@ ends the run as a terminal budget failure.
   context assembly rather than being silently dropped. Independent branches run
   concurrently (bounded by a runtime concurrency cap), while results are
   assembled in declared order, so artifacts and context stay deterministic
-  regardless of completion order
+  regardless of completion order. Each branch's phase output is grouped under
+  `scatter/NN-<mode>/`
   ([`RB-008`](docs/research/RB-008-bounded-scatter-gather.md)).
 
 ```powershell
