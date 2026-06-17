@@ -2274,7 +2274,8 @@ implementation is approved or finished.
 
 Research priority:
 
-1. `RB-008` Bounded scatter-gather orchestration.
+1. `RB-008` Bounded scatter-gather orchestration. (Research complete; promoted,
+   implementation gated on `RS-006`.)
 2. `RB-009` Context projection and information barriers.
 3. `RB-010` Static boundedness analysis.
 4. `RB-011` Speculative execution with deterministic commit.
@@ -2427,6 +2428,14 @@ Guardrails:
   framework.
 
 ### RB-008 - Bounded scatter-gather orchestration
+
+Research status: `complete` on 2026-06-17. Disposition: promote to the catalog
+as a new registered pattern; implementation deferred until `RS-006` (execution
+budgets) lands. The only new runtime work is bounded concurrent execution of
+independent nodes in the shared executor.
+
+Design note:
+[`docs/research/RB-008-bounded-scatter-gather.md`](docs/research/RB-008-bounded-scatter-gather.md)
 
 Research a pattern that runs a fixed set of independent reasoning nodes in
 parallel and gathers their typed outputs into one declared synthesis node.
