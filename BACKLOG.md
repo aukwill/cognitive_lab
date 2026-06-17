@@ -173,6 +173,15 @@ Relevant research:
 
 Priority: `P1`
 
+Motivation: Two runs that differ only by environment (source commit, .NET
+version, OS, effective config, provider/model version) look identical in the
+trace, so you cannot explain why results diverged or faithfully reproduce a
+past run.
+
+Outcome: `run.json` carries a provenance envelope with unknowns marked rather
+than guessed, so replay and comparison reports can point to exactly which
+environment fields differ.
+
 Acceptance:
 
 - `run.json` records runtime assembly version, source commit when available,
@@ -189,6 +198,15 @@ Acceptance:
 ### CF-003 - Define the agent threat and data-governance model
 
 Priority: `P1`
+
+Motivation: Without a written trust and data model, code makes ad-hoc choices
+about what untrusted input may do and what may appear in traces, artifacts, and
+exports, leaving prompt injection, secret leakage, and trace poisoning
+unaddressed by design.
+
+Outcome: A versioned design note classifies actors, trust boundaries, and data
+classes that tool policy, context projection, and export behavior all reference,
+and names the residual risks the runtime does not claim to solve.
 
 Produce a versioned design note covering assets, actors, trust boundaries,
 attack surfaces, data classes, retention, redaction, deletion, artifact
@@ -217,6 +235,13 @@ Relevant research:
 ### CF-004 - Define an evaluation validity protocol
 
 Priority: `P1`
+
+Motivation: An eval can pass while measuring an exploitable proxy instead of the
+behavior it claims to, so a wall of green checks can give false confidence.
+
+Outcome: Every eval declares its construct, observable proxy, blind spots, and
+negative controls, and cannot become a release gate until its false-positive and
+false-negative behavior is demonstrated on planted fixtures.
 
 Research and document how an eval demonstrates that it measures the intended
 runtime behavior rather than an exploitable proxy.
@@ -726,6 +751,14 @@ Acceptance:
 
 Priority: `P1`
 
+Motivation: Cancellation has undefined behavior depending on when it happens
+(before, during, or after a model call) and is indistinguishable from a provider
+timeout, so an interrupted run leaves an ambiguous record.
+
+Outcome: Cancellation has a defined outcome at every boundary, is distinguished
+from timeout, records one terminal cancellation event with useful partial
+artifacts, and maps to the documented exit code 130.
+
 Acceptance:
 
 - Cancellation before, during, and after a model call has a defined outcome.
@@ -737,6 +770,14 @@ Acceptance:
 ### RS-006 - Add runtime-owned execution budgets
 
 Priority: `P2`
+
+Motivation: A run can consume unbounded input size, model calls, output length,
+or wall-clock time, so a misbehaving loop or pathological input has no
+runtime-enforced ceiling.
+
+Outcome: Runtime-owned typed limits bound input characters, model calls, phase
+output, and duration; breaches are traced with the limit and the observed value,
+enforced outside the model clients.
 
 Start with fixed, typed limits:
 
@@ -898,6 +939,14 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: A run records nothing about the exact mode and prompt content it
+used, so when behavior changes between two runs you cannot tell whether a mode
+edit caused it.
+
+Outcome: The run records hashes of `mode.json` and every prompt used, so a
+reader can detect when a mode changed between runs (the basis for the `RB-005`
+drift report).
+
 Acceptance:
 
 - The run records hashes for `mode.json` and all prompts used.
@@ -924,6 +973,14 @@ Acceptance:
 ### TA-011 - Verify atomic write behavior
 
 Priority: `P2`
+
+Motivation: Artifact writes are assumed atomic but untested, so an interrupted
+write could leave a half-serialized trace or stray temporary files and nothing
+would catch it.
+
+Outcome: Tests prove existing content is replaced cleanly, interrupted writes
+never leave a partial trace, and temporary files stay inside the run directory
+and are cleaned up on success.
 
 Acceptance:
 
@@ -1056,6 +1113,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: Eval results exist only as Markdown prose, so automation cannot
+reliably distinguish pass, fail, and not-run or track a check across runs.
+
+Outcome: JSON and Markdown render from one typed report with stable check IDs,
+so tooling can consume eval results programmatically.
+
 Acceptance:
 
 - JSON and Markdown reports are rendered from the same typed report.
@@ -1065,6 +1128,12 @@ Acceptance:
 ### EV-007 - Add eval severity
 
 Priority: `P2`
+
+Motivation: Every check is pass/fail with equal weight, so there is no way to
+surface an advisory signal without it silently becoming a release gate.
+
+Outcome: Checks carry error or warning severity; errors decide pass/fail while
+warnings stay visible across Markdown, JSON, trace, and HTML without gating.
 
 Support `error` and `warning` without allowing warnings to silently become
 success criteria.
@@ -1079,6 +1148,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: `TA-007` records artifact hashes and sizes, but nothing checks them,
+so a modified or missing artifact still passes evaluation.
+
+Outcome: An eval verifies required artifacts exist, match their recorded hash,
+and stay inside the run directory, naming the exact missing or modified file.
+
 Acceptance:
 
 - Required artifacts exist and match their recorded hash.
@@ -1088,6 +1163,12 @@ Acceptance:
 ### EV-009 - Add eval execution tracing
 
 Priority: `P1`
+
+Motivation: Evaluation runs as a black box; when a check fails you cannot see
+from the trace which checks ran or how long they took.
+
+Outcome: Each check emits a stable check ID, status, and duration without
+duplicating large artifact contents, and eval failures stay deterministic.
 
 Acceptance:
 
@@ -1103,6 +1184,12 @@ Outcome: modes are easy to inspect and difficult to misconfigure.
 
 Priority: `P1`
 
+Motivation: `mode.json` has no schema version distinct from its content version,
+so a future manifest-format change cannot be detected or rejected cleanly.
+
+Outcome: The manifest declares a schema version, unsupported versions fail
+clearly, and existing modes migrate together.
+
 Acceptance:
 
 - `mode.json` declares a schema version distinct from the mode content version.
@@ -1112,6 +1199,12 @@ Acceptance:
 ### MO-002 - Reject unknown manifest properties
 
 Priority: `P1`
+
+Motivation: A misspelled manifest field is silently ignored today, so a typo'd
+setting fails open instead of being caught at load time.
+
+Outcome: Unknown properties fail loading with the manifest path and offending
+property named.
 
 Acceptance:
 
@@ -1123,6 +1216,14 @@ Acceptance:
 
 Priority: `P1`
 
+Motivation: Phase names and prompt paths are not constrained, so unsafe
+characters, duplicate or missing required phases, or prompt paths escaping the
+mode directory can slip through.
+
+Outcome: Phase names use a safe documented character set, prompt paths are
+unique, relative, and contained, required phases cannot be omitted or repeated,
+and unreferenced required prompts are detected.
+
 Acceptance:
 
 - Phase names use a safe, documented character set.
@@ -1133,6 +1234,12 @@ Acceptance:
 ### MO-004 - Add mode validation to the CLI
 
 Priority: `P1`
+
+Motivation: There is no way to check a mode is valid without doing a full run,
+so authors discover mistakes only by running the loop.
+
+Outcome: A CLI command validates a mode with no model call and no run output,
+with documented success and failure exit codes.
 
 Suggested command:
 
@@ -1150,6 +1257,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: Operators cannot discover which modes exist or what they do without
+reading the filesystem.
+
+Outcome: The CLI lists valid mode names, versions, descriptions, and phase
+order, surfacing invalid mode directories without blocking the valid ones.
+
 Acceptance:
 
 - The CLI lists valid mode names, versions, descriptions, and phase order.
@@ -1161,6 +1274,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: All phases share one output contract, so main, critic, and revision
+cannot declare different structural expectations.
+
+Outcome: Each phase may declare its own contract while final evaluation still
+targets the authoritative revision; missing contracts receive explicit defaults.
+
 Acceptance:
 
 - Main, critic, and revision may declare different structural contracts.
@@ -1171,6 +1290,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: `MODE.md` can drift from or omit the actual configured phases and
+output, leaving documentation that misrepresents the mode.
+
+Outcome: Validation confirms `MODE.md` exists, is non-empty, and names the
+configured phases and intended output, without judging prose quality.
+
 Acceptance:
 
 - `MODE.md` exists and is non-empty.
@@ -1180,6 +1305,13 @@ Acceptance:
 ### MO-008 - Validate every built-in mode and prompt variant
 
 Priority: `P1`
+
+Motivation: Nothing guarantees the shipped modes and lens variants actually load
+and validate, so a broken built-in mode could ship unnoticed.
+
+Outcome: `frame`, `challenge`, `synthesize`, and each checked-in lens variant
+load and validate without a model call, covering manifests, prompt containment,
+required phases, and output contracts.
 
 Acceptance:
 
@@ -1199,6 +1331,12 @@ credential-free corpus.
 ### RG-001 - Add deterministic eval cases
 
 Priority: `P1`
+
+Motivation: There is no shared corpus of inputs with expected outcomes, so
+mode and runtime changes cannot be evaluated for regressions offline.
+
+Outcome: Data-driven, human-readable, network-free cases declare input, expected
+contract outcome, and expected invariants, including intentionally failing ones.
 
 Suggested layout:
 
@@ -1222,6 +1360,12 @@ Acceptance:
 
 Priority: `P1`
 
+Motivation: Even with cases, there is no runner to execute them through the real
+orchestrator deterministically.
+
+Outcome: A Core runner executes cases through the normal orchestrator with
+deterministic ordering, and one case failure does not stop later cases.
+
 Acceptance:
 
 - The runner executes cases through the normal orchestrator.
@@ -1231,6 +1375,12 @@ Acceptance:
 ### RG-003 - Add a CLI eval command
 
 Priority: `P2`
+
+Motivation: The eval suite is not runnable from the CLI, keeping regression
+checks out of normal workflows.
+
+Outcome: A thin CLI eval command configures services and invokes Core, writes
+suite output under a timestamped folder, and exits with the suite's status.
 
 Suggested command:
 
@@ -1248,6 +1398,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: A suite run produces per-case output but no roll-up, so you cannot
+see aggregate pass/fail at a glance or jump to failures.
+
+Outcome: Markdown and JSON summaries from typed results list cases, checks,
+durations, and artifact paths, linking each failure to its run directory.
+
 Acceptance:
 
 - Markdown and JSON summarize cases, checks, durations, and artifact paths.
@@ -1258,6 +1414,13 @@ Acceptance:
 
 Priority: `P1`
 
+Motivation: The deterministic evals are assumed to catch malformed output, but
+nothing proves each one fails for its intended reason rather than by accident.
+
+Outcome: Fixtures for missing, misordered, and duplicate headings, empty
+sections, malformed traces, and absent artifacts prove each eval fails for the
+right cause.
+
 Acceptance:
 
 - Fixtures cover missing headings, wrong order, duplicate headings, empty
@@ -1267,6 +1430,13 @@ Acceptance:
 ### RG-006 - Add recorded-response replay
 
 Priority: `P2`
+
+Motivation: Reproducing a real-provider run requires the provider; there is no
+credential-free way to replay recorded responses.
+
+Outcome: An `IModelClient` replays sanitized, checked-in responses matched by
+mode, phase, and fixture ID, failing loudly on missing or unexpected calls and
+recording no secrets.
 
 Create an `IModelClient` that replays sanitized, checked-in responses.
 
@@ -1282,6 +1452,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: There is no way to tell what changed between two runs of the same
+case beyond eyeballing artifacts.
+
+Outcome: A comparison reports changed eval status, trace shape, artifact hashes,
+and phase output lengths as an artifact, without semantic quality scoring.
+
 Acceptance:
 
 - A comparison reports changed eval status, trace shape, artifact hashes, and
@@ -1292,6 +1468,13 @@ Acceptance:
 ### RG-008 - Compare orchestration patterns on fixed cases
 
 Priority: `P2`
+
+Motivation: You cannot systematically compare how different patterns handle the
+same input on a fixed set of cases.
+
+Outcome: A data-driven matrix runs cases through multiple registered patterns and
+compares model-call count, executed nodes, eval status, durations, and outputs,
+each run independent and inspectable, with no LLM judge.
 
 Acceptance:
 
@@ -1310,6 +1493,14 @@ without leaking provider details into the loop.
 ### MP-001 - Add typed provider failure categories
 
 Priority: `P1`
+
+Motivation: Provider failures surface as opaque exceptions, so the CLI, trace,
+and tests cannot reason in a common way about why a call failed (auth vs
+rate-limit vs timeout).
+
+Outcome: `ModelProviderException` carries a shared typed category used by CLI,
+trace, and tests, while provider-specific response details stay inside each
+client.
 
 Suggested categories:
 
@@ -1335,6 +1526,12 @@ Acceptance:
 
 Priority: `P1`
 
+Motivation: A provider timeout and a user cancellation are conflated, so an
+interrupted call cannot be attributed correctly.
+
+Outcome: Timeout is reported as a provider failure while user cancellation keeps
+cancellation semantics, covered by GitHub Models tests for both cases.
+
 Acceptance:
 
 - GitHub Models tests cover both cases.
@@ -1344,6 +1541,14 @@ Acceptance:
 ### MP-003 - Add common response metadata
 
 Priority: `P2`
+
+Motivation: Useful provider metadata (request ID, token usage, finish reason,
+latency) is discarded, and budget consumers cannot tell unknown usage from a
+measured zero.
+
+Outcome: `ModelResponse` may report this metadata when available, missing values
+stay valid, the orchestrator never parses provider payloads, and unknown usage
+is distinguishable from zero.
 
 Acceptance:
 
@@ -1356,6 +1561,13 @@ Acceptance:
 ### MP-004 - Add explicit retry policy
 
 Priority: `P2`
+
+Motivation: Retry behavior is implicit, risking silent duplicate calls (or none)
+with no accounting against runtime budgets.
+
+Outcome: A small, inspectable policy retries only explicitly transient
+categories, traces attempts separately, counts them against budgets, and never
+retries cancellation.
 
 Keep retries small and inspectable.
 
@@ -1370,6 +1582,13 @@ Acceptance:
 
 Priority: `P1`
 
+Motivation: The GitHub Models client's wire protocol and error handling are
+under-tested, so a regression in URI, headers, or error mapping could ship.
+
+Outcome: Fake-handler tests verify URI, headers, API version, model, messages,
+and cancellation, plus 401/403/429, malformed JSON, missing choices, and empty
+text, with bounded secret-free error messages.
+
 Acceptance:
 
 - Fake-handler tests verify URI, headers, API version, model, messages, and
@@ -1381,6 +1600,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: Misconfiguration is only discovered by making a real model call,
+which is slow and may waste attempts.
+
+Outcome: Configuration can be validated without a model call, returning typed
+errors, exposed by the CLI without moving provider rules into CLI code.
+
 Acceptance:
 
 - Configuration can be checked without making a model call.
@@ -1390,6 +1615,13 @@ Acceptance:
 ### MP-007 - Implement a minimal Azure Foundry HTTP adapter
 
 Priority: `P2`
+
+Motivation: There is no Azure Foundry provider, so runs cannot target an Azure
+OpenAI/Foundry resource through the existing provider boundaries.
+
+Outcome: A minimal `HttpClient`-based adapter with fake-handler tests (no
+credential-dependent test) keeps config, auth, parsing, and failures isolated,
+with documented protocol and limitations.
 
 This is a minimal provider client, not a full Azure deployment feature.
 
@@ -1403,6 +1635,13 @@ Acceptance:
 ### MP-008 - Add opt-in provider smoke tests
 
 Priority: `Research`
+
+Motivation: There is no way to occasionally validate real providers end-to-end
+without endangering credential-free CI.
+
+Outcome: Opt-in smoke tests, excluded from normal `dotnet test`, require explicit
+env vars and invocation, never print credentials, and cannot fail
+credential-free CI.
 
 Acceptance:
 
@@ -1420,6 +1659,12 @@ any model-driven tool loop is considered.
 
 Priority: `P1`
 
+Motivation: The static view expects phase data on tool events, but tool traces
+do not carry it, so tool activity cannot be tied to the phase that requested it.
+
+Outcome: `ToolRequest` identifies the requesting phase and policy, call,
+completion, and failure events include it, verified by tests.
+
 The static view expects phase data, but current tool events do not carry it.
 
 Acceptance:
@@ -1432,6 +1677,13 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: Tools are not registered through a typed registry, so duplicate names
+or unknown category/provider are not caught before execution.
+
+Outcome: Tool descriptors come from registered providers, duplicate names fail
+startup or validation clearly, and the runtime can inspect category and provider
+before execution.
+
 Acceptance:
 
 - Tool descriptors come from registered providers.
@@ -1441,6 +1693,13 @@ Acceptance:
 ### TP-003 - Make allowlists explicit run policy
 
 Priority: `P2`
+
+Motivation: Effective tool permission is not an explicit, recorded policy, so it
+is unclear what is actually allowed and the model could influence it.
+
+Outcome: Effective permission is the intersection of runtime config and mode
+declaration, an absent allowlist blocks all tools, the model cannot widen it,
+and effective policy is recorded in `run.json`.
 
 Acceptance:
 
@@ -1454,6 +1713,14 @@ Acceptance:
 
 Priority: `P1`
 
+Motivation: Path containment for tool writes is not exhaustively tested, so
+sibling-prefix, `..`, rooted, alternate-separator, or symlink escapes could
+leave the run directory.
+
+Outcome: Tests cover those cases, reparse-point/symlink escapes are blocked or
+documented as unsupported, and writes stay constrained to the run output
+directory.
+
 Acceptance:
 
 - Tests cover sibling-prefix paths, `..`, rooted paths, alternate separators,
@@ -1466,6 +1733,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: When a write or tool is approved, nothing records who approved what,
+when, and at what scope, so approvals are not auditable.
+
+Outcome: Approval records source, timestamp, tool, target, and scope as runtime
+input (not model output), traced without exposing secret arguments.
+
 Acceptance:
 
 - Approval includes source, timestamp, tool name, target, and scope.
@@ -1475,6 +1748,13 @@ Acceptance:
 ### TP-006 - Add tool execution limits
 
 Priority: `P2`
+
+Motivation: Tool calls have no runtime ceiling on argument or result size, call
+count, or timeout, so a tool loop is unbounded.
+
+Outcome: Runtime policy limits argument size, result size, call count, and
+timeout; breaches are traced and fail predictably; execute-category tools stay
+blocked.
 
 Acceptance:
 
@@ -1486,6 +1766,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: Sensitive tool arguments would be written verbatim to the trace,
+leaking secrets.
+
+Outcome: Descriptors mark sensitive argument names and the trace records redacted
+placeholders, including for nested structured arguments.
+
 Acceptance:
 
 - Tool descriptors can identify sensitive argument names.
@@ -1495,6 +1781,13 @@ Acceptance:
 ### TP-008 - Exercise `MockToolProvider` through orchestration
 
 Priority: `P2`
+
+Motivation: The tool policy/executor boundary is built but never exercised
+end-to-end through orchestration, so its guarantees are unproven.
+
+Outcome: A runtime-authored test plan drives every call through `ToolPolicy` and
+`ToolExecutor`, traces allowed, denied, and failed calls, and cannot write
+outside its run directory.
 
 Use an explicit runtime-authored test plan rather than model-selected tools.
 
@@ -1507,6 +1800,15 @@ Acceptance:
 ### TP-009 - Add a read-only evidence phase experiment
 
 Priority: `Research`
+
+Motivation: Letting a model reason over tool results risks blurring trusted
+runtime data and untrusted output; the design must be validated before any
+autonomous tool use.
+
+Outcome: A fixed phase where the runtime supplies allowlisted read results, with
+typed evidence items, runtime-selected tools, delimited untrusted output, and
+traced citations. Design note complete; implementation deferred behind the tool
+policy and run-state prerequisites.
 
 Research status: `complete` on 2026-06-13. Implementation is deferred until the
 tool policy and run-state prerequisites land.
@@ -1528,6 +1830,12 @@ Questions:
 
 Priority: `P2`
 
+Motivation: MCP must remain a real, replaceable boundary without pulling a
+production transport into the MVP.
+
+Outcome: `McpToolProvider` fails clearly when invoked, no production MCP
+transport is added, and the boundary stays testable and replaceable.
+
 Acceptance:
 
 - `McpToolProvider` fails clearly when invoked.
@@ -1537,6 +1845,13 @@ Acceptance:
 ### TP-011 - Add policy simulation
 
 Priority: `P2`
+
+Motivation: There is no way to see what the tool policy would decide for proposed
+requests without actually executing a provider.
+
+Outcome: Simulation runs proposed requests through the real `ToolPolicy` without
+calling any `IToolProvider`, reporting allow/deny, matched rule, phase, provider,
+reason, and redacted arguments.
 
 Evaluate proposed tool requests through the real policy boundary without
 executing a provider.
@@ -1556,6 +1871,13 @@ Outcome: the CLI remains thin while making runs and modes easier to operate.
 ### CL-001 - Introduce explicit CLI commands
 
 Priority: `P2`
+
+Motivation: The CLI folds everything into one invocation, so adding run,
+inspect, verify, and eval modes risks piling behavior into the CLI layer.
+
+Outcome: Explicit commands keep parsing in the CLI and behavior in Core;
+existing invocation still works or gets a documented migration; no heavy command
+framework unless complexity proves it useful.
 
 Potential commands:
 
@@ -1579,6 +1901,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: The CLI emits only human text, so automation cannot reliably capture
+run ID, outcome, and artifact paths.
+
+Outcome: `--format json` reports those fields, human output stays the default,
+and logs do not corrupt JSON stdout.
+
 Acceptance:
 
 - `--format json` reports run ID, outcome, output directory, and artifact paths.
@@ -1588,6 +1916,11 @@ Acceptance:
 ### CL-003 - Support standard input
 
 Priority: `P2`
+
+Motivation: Input must be a file, so piping content into a run is not possible.
+
+Outcome: `--input -` reads UTF-8 from stdin, empty stdin is a usage error,
+`input.md` is still written, and the source is recorded as `stdin`.
 
 Acceptance:
 
@@ -1600,6 +1933,12 @@ Acceptance:
 
 Priority: `P1`
 
+Motivation: Exit codes for success, runtime failure, usage error, eval failure,
+and cancellation are not pinned, so scripts cannot rely on them.
+
+Outcome: Each has a stable, documented code covered by CLI tests, and
+provider-specific errors do not invent new codes.
+
 Acceptance:
 
 - Success, runtime failure, usage error, eval failure, and cancellation have
@@ -1610,6 +1949,12 @@ Acceptance:
 ### CL-005 - Add a dry validation command
 
 Priority: `P2`
+
+Motivation: There is no pre-flight check of mode, input, output-root safety, and
+provider config before committing to a run.
+
+Outcome: A command validates those without any external request and without
+creating a run directory.
 
 Acceptance:
 
@@ -1622,6 +1967,13 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: Understanding a completed run means manually opening its JSON and
+trace files.
+
+Outcome: An inspect command reads `run.json`, eval reports, and the trace through
+Core readers and reports outcome, phase status, provider, durations, and
+integrity status, without mutating the run.
+
 Acceptance:
 
 - Reads `run.json`, eval reports, and trace through Core readers.
@@ -1632,6 +1984,13 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: There is no way to confirm after the fact that a completed run was
+not corrupted or tampered with.
+
+Outcome: A verify command checks trace schema, terminal invariants, required
+artifacts, and hashes, returns a nonzero code on tampering or corruption, and
+works without loading model providers (consuming the `TA-007` hashes).
+
 Acceptance:
 
 - Verifies trace schema, terminal invariants, required artifacts, and hashes.
@@ -1641,6 +2000,13 @@ Acceptance:
 ### CL-008 - Export an artifact bundle
 
 Priority: `P2`
+
+Motivation: Sharing a run means manually zipping a directory with no integrity
+guarantee.
+
+Outcome: Export packages one verified run into a deterministic local archive with
+a manifest of paths, hashes, and byte lengths, fails on integrity errors, and
+adds no upload or remote behavior.
 
 Acceptance:
 
@@ -1658,6 +2024,12 @@ behavior.
 
 Priority: `P1`
 
+Motivation: Not every built-in mode and lens variant is proven to run
+end-to-end, so a broken mode could pass CI.
+
+Outcome: Every built-in mode and checked-in lens runs through its compatible mock
+pattern, eval, and finalization, asserting mode-specific headings.
+
 Acceptance:
 
 - Every built-in mode and checked-in lens variant runs through its compatible
@@ -1668,6 +2040,12 @@ Acceptance:
 
 Priority: `P1`
 
+Motivation: Cancellation behavior at mode load, model call, artifact write, and
+eval is untested, so interruptions could corrupt state.
+
+Outcome: Tests cancel at each boundary and confirm partial outputs remain
+understandable.
+
 Acceptance:
 
 - Tests cancel during mode load, model call, artifact write, and eval.
@@ -1676,6 +2054,13 @@ Acceptance:
 ### RT-003 - Add concurrent run tests
 
 Priority: `P2`
+
+Motivation: Concurrent runs could collide on directories or trace sessions, and
+nothing proves they do not.
+
+Outcome: Tests prove concurrent runs never share directories or sessions,
+artifacts stay associated with the correct run ID, and no global mutable runtime
+state is introduced.
 
 Acceptance:
 
@@ -1687,6 +2072,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: Filesystem failures (unwritable root, failed atomic replace, missing
+run dir) are untested, so cleanup could hide the original error.
+
+Outcome: Tests cover those cases where practical and confirm original exceptions
+are not masked by cleanup failures.
+
 Acceptance:
 
 - Tests cover unwritable output roots, failed atomic replacement, and missing
@@ -1697,6 +2088,11 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: The trace reader's handling of corrupt input (truncated JSON,
+unknown schema, duplicate sequences, bad terminal ordering) is unverified.
+
+Outcome: Each malformed case produces a useful error.
+
 Acceptance:
 
 - Truncated JSON, unknown schema versions, duplicate sequence numbers, and
@@ -1705,6 +2101,12 @@ Acceptance:
 ### RT-006 - Add culture and timezone tests
 
 Priority: `P2`
+
+Motivation: Machine-readable timestamps and numbers could vary by locale,
+breaking determinism across machines.
+
+Outcome: Timestamps use invariant ISO 8601, numeric metadata is culture
+invariant, and output directory timestamps stay UTC.
 
 Acceptance:
 
@@ -1715,6 +2117,14 @@ Acceptance:
 ### RT-007 - Add architecture boundary tests
 
 Priority: `P2`
+
+Motivation: The architectural boundaries are documented but not enforced, so
+they can erode silently over time.
+
+Outcome: Tests fail if Core references CLI, orchestration references provider
+implementation types, eval/artifact code references provider config, pattern
+implementations coordinate runtime services, or the orchestrator branches on a
+pattern name.
 
 Acceptance:
 
@@ -1728,6 +2138,12 @@ Acceptance:
 
 Priority: `P1`
 
+Motivation: Without CI, the "tests pass without credentials" guarantee relies on
+local discipline alone.
+
+Outcome: CI restores and runs `dotnet test` with no secrets, does not commit
+generated `outputs/`, and matches the documented local commands.
+
 Acceptance:
 
 - CI restores and runs `dotnet test`.
@@ -1738,6 +2154,14 @@ Acceptance:
 ### RT-009 - Add a pattern conformance test kit
 
 Priority: `P1`
+
+Motivation: Each new pattern could silently violate the runtime's invariants
+(deterministic planning, unique node IDs, bounded execution, one authoritative
+output), and adding a pattern without coverage is easy.
+
+Outcome: A shared kit runs every registered pattern through those invariants,
+proves model output cannot mutate the plan, covers pipeline configs as data, and
+fails when a registered pattern lacks conformance coverage.
 
 Acceptance:
 
@@ -1756,6 +2180,12 @@ Outcome: generated inspection remains an artifact, not an application.
 
 Priority: `P2`
 
+Motivation: The static page does not link the individual artifacts, so
+navigating a run means hunting through the filesystem.
+
+Outcome: The page links main, critic, revision, result, trace, and eval
+artifacts with relative in-run links (building on the `TA-008` phase files).
+
 Acceptance:
 
 - The static page links to main, critic, revision, result, trace, and eval
@@ -1765,6 +2195,12 @@ Acceptance:
 ### SI-002 - Render an event timeline
 
 Priority: `P2`
+
+Motivation: The static view shows summaries but not the sequence of what
+happened when.
+
+Outcome: A JavaScript-free timeline generated from typed events shows sequence,
+timestamp, phase, and duration where available.
 
 Acceptance:
 
@@ -1776,6 +2212,12 @@ Acceptance:
 
 Priority: `P2`
 
+Motivation: The page does not surface trace schema, mode version, prompt hashes,
+or artifact verification, so inspectability stops short of trust.
+
+Outcome: The page shows those fields and artifact verification status while
+omitting sensitive configuration.
+
 Acceptance:
 
 - The page shows trace schema, mode version, prompt hashes, and artifact
@@ -1785,6 +2227,12 @@ Acceptance:
 ### SI-004 - Improve accessibility and printing
 
 Priority: `P2`
+
+Motivation: The static view is not verified for semantic structure,
+color-independent status, or print readability.
+
+Outcome: Semantic landmarks and table headings are present, status is not
+conveyed by color alone, and print output stays readable.
 
 Acceptance:
 
