@@ -47,6 +47,9 @@ public static class TracePayloadKeys
     // Artifacts.
     public const string RelativePath = "relativePath";
 
+    // The planned artifact set announced on artifact.reserved.
+    public const string Artifacts = "artifacts";
+
     // Evaluation and terminal outcome.
     public const string Passed = "passed";
     public const string CheckCount = "checkCount";

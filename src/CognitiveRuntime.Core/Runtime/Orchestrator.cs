@@ -112,7 +112,7 @@ public sealed class Orchestrator
                 TraceEventNames.ArtifactReserved,
                 new Dictionary<string, object?>
                 {
-                    ["artifacts"] = state.ArtifactLedger
+                    [TracePayloadKeys.Artifacts] = state.ArtifactLedger
                         .Select(artifact => artifact.Name)
                         .ToArray()
                 },
