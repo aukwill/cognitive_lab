@@ -41,10 +41,10 @@ public sealed class PhaseRunner
             TraceEventNames.PhaseStarted,
             new Dictionary<string, object?>
             {
-                ["nodeId"] = executionNodeId,
-                ["mode"] = mode.Manifest.Name,
-                ["phase"] = phase.Name,
-                ["kind"] = phase.Kind.ToString().ToLowerInvariant()
+                [TracePayloadKeys.NodeId] = executionNodeId,
+                [TracePayloadKeys.Mode] = mode.Manifest.Name,
+                [TracePayloadKeys.Phase] = phase.Name,
+                [TracePayloadKeys.Kind] = phase.Kind.ToString().ToLowerInvariant()
             },
             cancellationToken);
 
@@ -52,7 +52,7 @@ public sealed class PhaseRunner
         {
             await trace.EmitAsync(
                 TraceEventNames.CriticStarted,
-                new Dictionary<string, object?> { ["phase"] = phase.Name },
+                new Dictionary<string, object?> { [TracePayloadKeys.Phase] = phase.Name },
                 cancellationToken);
         }
         else if (phase.Kind == PhaseKind.Revision)
@@ -61,8 +61,8 @@ public sealed class PhaseRunner
                 TraceEventNames.RevisionStarted,
                 new Dictionary<string, object?>
                 {
-                    ["phase"] = phase.Name,
-                    ["priorPhaseCount"] = priorPhaseResults.Count
+                    [TracePayloadKeys.Phase] = phase.Name,
+                    [TracePayloadKeys.PriorPhaseCount] = priorPhaseResults.Count
                 },
                 cancellationToken);
         }
@@ -72,11 +72,11 @@ public sealed class PhaseRunner
             TraceEventNames.ModelCalled,
             new Dictionary<string, object?>
             {
-                ["callId"] = callId,
-                ["nodeId"] = executionNodeId,
-                ["attempt"] = attempt,
-                ["provider"] = modelClient.ProviderName,
-                ["phase"] = phase.Name
+                [TracePayloadKeys.CallId] = callId,
+                [TracePayloadKeys.NodeId] = executionNodeId,
+                [TracePayloadKeys.Attempt] = attempt,
+                [TracePayloadKeys.Provider] = modelClient.ProviderName,
+                [TracePayloadKeys.Phase] = phase.Name
             },
             cancellationToken);
 
@@ -125,14 +125,14 @@ public sealed class PhaseRunner
             TraceEventNames.ModelCompleted,
             new Dictionary<string, object?>
             {
-                ["callId"] = callId,
-                ["nodeId"] = executionNodeId,
-                ["attempt"] = attempt,
-                ["provider"] = response.Provider,
-                ["model"] = response.Model,
-                ["phase"] = phase.Name,
-                ["contentLength"] = response.Content.Length,
-                ["durationMs"] = RuntimeDuration.GetMilliseconds(
+                [TracePayloadKeys.CallId] = callId,
+                [TracePayloadKeys.NodeId] = executionNodeId,
+                [TracePayloadKeys.Attempt] = attempt,
+                [TracePayloadKeys.Provider] = response.Provider,
+                [TracePayloadKeys.Model] = response.Model,
+                [TracePayloadKeys.Phase] = phase.Name,
+                [TracePayloadKeys.ContentLength] = response.Content.Length,
+                [TracePayloadKeys.DurationMs] = RuntimeDuration.GetMilliseconds(
                     modelStartedAt,
                     modelCompletedAt)
             },
@@ -144,8 +144,8 @@ public sealed class PhaseRunner
                 TraceEventNames.CriticCompleted,
                 new Dictionary<string, object?>
                 {
-                    ["phase"] = phase.Name,
-                    ["contentLength"] = response.Content.Length
+                    [TracePayloadKeys.Phase] = phase.Name,
+                    [TracePayloadKeys.ContentLength] = response.Content.Length
                 },
                 cancellationToken);
         }
@@ -155,8 +155,8 @@ public sealed class PhaseRunner
                 TraceEventNames.RevisionCompleted,
                 new Dictionary<string, object?>
                 {
-                    ["phase"] = phase.Name,
-                    ["contentLength"] = response.Content.Length
+                    [TracePayloadKeys.Phase] = phase.Name,
+                    [TracePayloadKeys.ContentLength] = response.Content.Length
                 },
                 cancellationToken);
         }
@@ -166,12 +166,12 @@ public sealed class PhaseRunner
             TraceEventNames.PhaseCompleted,
             new Dictionary<string, object?>
             {
-                ["nodeId"] = executionNodeId,
-                ["mode"] = mode.Manifest.Name,
-                ["phase"] = phase.Name,
-                ["kind"] = phase.Kind.ToString().ToLowerInvariant(),
-                ["contentLength"] = response.Content.Length,
-                ["durationMs"] = RuntimeDuration.GetMilliseconds(
+                [TracePayloadKeys.NodeId] = executionNodeId,
+                [TracePayloadKeys.Mode] = mode.Manifest.Name,
+                [TracePayloadKeys.Phase] = phase.Name,
+                [TracePayloadKeys.Kind] = phase.Kind.ToString().ToLowerInvariant(),
+                [TracePayloadKeys.ContentLength] = response.Content.Length,
+                [TracePayloadKeys.DurationMs] = RuntimeDuration.GetMilliseconds(
                     phaseStartedAt,
                     phaseCompletedAt)
             },
@@ -203,11 +203,11 @@ public sealed class PhaseRunner
         try
         {
             var data = RuntimeFailureFactory.ToTraceData(failure);
-            data["callId"] = callId;
-            data["nodeId"] = executionNodeId;
-            data["attempt"] = attempt;
-            data["cancelled"] = exception is OperationCanceledException;
-            data["durationMs"] = RuntimeDuration.GetMilliseconds(
+            data[TracePayloadKeys.CallId] = callId;
+            data[TracePayloadKeys.NodeId] = executionNodeId;
+            data[TracePayloadKeys.Attempt] = attempt;
+            data[TracePayloadKeys.Cancelled] = exception is OperationCanceledException;
+            data[TracePayloadKeys.DurationMs] = RuntimeDuration.GetMilliseconds(
                 startedAt,
                 _timeProvider.GetUtcNow());
             await trace.EmitAsync(

@@ -215,7 +215,7 @@ public sealed class EvalRunner : IEvalRunner
                     completionEventType,
                     StringComparison.Ordinal) &&
                 string.Equals(
-                    GetDataString(traceEvent, "phase"),
+                    GetDataString(traceEvent, TracePayloadKeys.Phase),
                     phaseName,
                     StringComparison.OrdinalIgnoreCase));
         var passed = matches.Length == 1 && completionEventFound;

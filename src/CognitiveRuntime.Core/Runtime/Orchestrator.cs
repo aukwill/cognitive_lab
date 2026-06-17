@@ -95,13 +95,14 @@ public sealed class Orchestrator
                 TraceEventNames.RunStarted,
                 new Dictionary<string, object?>
                 {
-                    ["mode"] = request.ModeName,
-                    ["provider"] = request.ModelProvider,
+                    [TracePayloadKeys.Mode] = request.ModeName,
+                    [TracePayloadKeys.Provider] = request.ModelProvider,
                     // Run directory name only, so trace.json stays
                     // location-independent and leaks no machine username.
-                    ["outputDirectory"] = Path.GetFileName(artifacts.RunDirectory),
-                    ["pattern"] = plan.PatternName,
-                    ["stages"] = GetStageModeNames(plan)
+                    [TracePayloadKeys.OutputDirectory] =
+                        Path.GetFileName(artifacts.RunDirectory),
+                    [TracePayloadKeys.Pattern] = plan.PatternName,
+                    [TracePayloadKeys.Stages] = GetStageModeNames(plan)
                 },
                 cancellationToken);
 
@@ -235,9 +236,9 @@ public sealed class Orchestrator
                 TraceEventNames.EvalCompleted,
                 new Dictionary<string, object?>
                 {
-                    ["passed"] = evalReport.Passed,
-                    ["checkCount"] = evalReport.Checks.Count,
-                    ["durationMs"] = RuntimeDuration.GetMilliseconds(
+                    [TracePayloadKeys.Passed] = evalReport.Passed,
+                    [TracePayloadKeys.CheckCount] = evalReport.Checks.Count,
+                    [TracePayloadKeys.DurationMs] = RuntimeDuration.GetMilliseconds(
                         evalStartedAt,
                         evalCompletedAt)
                 },
@@ -293,7 +294,7 @@ public sealed class Orchestrator
                 endedAt,
                 new Dictionary<string, object?>
                 {
-                    ["evalPassed"] = state.EvalReport.Passed
+                    [TracePayloadKeys.EvalPassed] = state.EvalReport.Passed
                 },
                 cancellationToken);
             state = succeededState;
@@ -480,9 +481,9 @@ public sealed class Orchestrator
             TraceEventNames.ArtifactWritten,
             new Dictionary<string, object?>
             {
-                ["name"] = Path.GetFileName(path),
-                ["kind"] = "phase",
-                ["relativePath"] = Path
+                [TracePayloadKeys.Name] = Path.GetFileName(path),
+                [TracePayloadKeys.Kind] = "phase",
+                [TracePayloadKeys.RelativePath] = Path
                     .GetRelativePath(runDirectory, path)
                     .Replace('\\', '/')
             },
@@ -497,8 +498,8 @@ public sealed class Orchestrator
             TraceEventNames.ArtifactWritten,
             new Dictionary<string, object?>
             {
-                ["name"] = Path.GetFileName(path),
-                ["kind"] = kind
+                [TracePayloadKeys.Name] = Path.GetFileName(path),
+                [TracePayloadKeys.Kind] = kind
             },
             cancellationToken);
 
@@ -645,7 +646,7 @@ public sealed class Orchestrator
         var data = additionalData is null
             ? new Dictionary<string, object?>()
             : new Dictionary<string, object?>(additionalData);
-        data["durationMs"] = RuntimeDuration.GetMilliseconds(
+        data[TracePayloadKeys.DurationMs] = RuntimeDuration.GetMilliseconds(
             runStartedAt,
             endedAt);
         var terminalEvent = RunTerminalTraceEventFactory.Create(
@@ -786,7 +787,9 @@ public sealed class Orchestrator
     {
         var data = new Dictionary<string, object?>
         {
-            ["pattern"] = plan.PatternName,
+            [TracePayloadKeys.Pattern] = plan.PatternName,
+            // The nested "plan" object is a structured projection of the resolved
+            // plan (mirroring run.json), not flat event keys, so it keeps literals.
             ["authoritativeNodeId"] = plan.AuthoritativeNodeId,
             ["plan"] = new Dictionary<string, object?>
             {
@@ -841,7 +844,7 @@ public sealed class Orchestrator
         }
         else
         {
-            data["stages"] = GetStageModeNames(plan);
+            data[TracePayloadKeys.Stages] = GetStageModeNames(plan);
         }
 
         return data;
@@ -852,7 +855,7 @@ public sealed class Orchestrator
     {
         var data = new Dictionary<string, object?>
         {
-            ["pattern"] = execution.Plan.PatternName,
+            [TracePayloadKeys.Pattern] = execution.Plan.PatternName,
             ["authoritativeNodeId"] = execution.Plan.AuthoritativeNodeId
         };
 
@@ -873,12 +876,12 @@ public sealed class Orchestrator
         execution.Stages.Count == 0
             ? new Dictionary<string, object?>
             {
-                ["mode"] = execution.AuthoritativeMode.Manifest.Name,
-                ["phaseCount"] = execution.NodeResults.Count
+                [TracePayloadKeys.Mode] = execution.AuthoritativeMode.Manifest.Name,
+                [TracePayloadKeys.PhaseCount] = execution.NodeResults.Count
             }
             : new Dictionary<string, object?>
             {
-                ["pattern"] = execution.Plan.PatternName,
+                [TracePayloadKeys.Pattern] = execution.Plan.PatternName,
                 ["stageCount"] = execution.Stages.Count
             };
 

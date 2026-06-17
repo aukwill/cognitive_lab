@@ -86,9 +86,9 @@ public sealed class PatternExecutor
                         TraceEventNames.StageStarted,
                         new Dictionary<string, object?>
                         {
-                            ["stageId"] = stage.Id,
-                            ["stageIndex"] = stage.Index,
-                            ["mode"] = modeSource.ModeName
+                            [TracePayloadKeys.StageId] = stage.Id,
+                            [TracePayloadKeys.StageIndex] = stage.Index,
+                            [TracePayloadKeys.Mode] = modeSource.ModeName
                         },
                         cancellationToken);
 
@@ -122,10 +122,10 @@ public sealed class PatternExecutor
                         TraceEventNames.StageCompleted,
                         new Dictionary<string, object?>
                         {
-                            ["stageId"] = stage.Id,
-                            ["stageIndex"] = stage.Index,
-                            ["mode"] = modeSource.ModeName,
-                            ["phaseCount"] = stageNodeResults.Count
+                            [TracePayloadKeys.StageId] = stage.Id,
+                            [TracePayloadKeys.StageIndex] = stage.Index,
+                            [TracePayloadKeys.Mode] = modeSource.ModeName,
+                            [TracePayloadKeys.PhaseCount] = stageNodeResults.Count
                         },
                         cancellationToken);
 
@@ -246,11 +246,11 @@ public sealed class PatternExecutor
                 TraceEventNames.ModeLoaded,
                 new Dictionary<string, object?>
                 {
-                    ["sourceId"] = source.Id,
-                    ["name"] = mode.Manifest.Name,
-                    ["version"] = mode.Manifest.Version,
-                    ["phaseCount"] = mode.Phases.Count,
-                    ["lens"] = source.Lens
+                    [TracePayloadKeys.SourceId] = source.Id,
+                    [TracePayloadKeys.Name] = mode.Manifest.Name,
+                    [TracePayloadKeys.Version] = mode.Manifest.Version,
+                    [TracePayloadKeys.PhaseCount] = mode.Phases.Count,
+                    [TracePayloadKeys.Lens] = source.Lens
                 },
                 cancellationToken);
         }
@@ -328,9 +328,9 @@ public sealed class PatternExecutor
                 mode.Manifest.Name,
                 phase.Name,
                 "completed");
-            completedData["provider"] = phaseResult.Provider;
-            completedData["model"] = phaseResult.Model;
-            completedData["outputLength"] = phaseResult.Content.Length;
+            completedData[TracePayloadKeys.Provider] = phaseResult.Provider;
+            completedData[TracePayloadKeys.Model] = phaseResult.Model;
+            completedData[TracePayloadKeys.OutputLength] = phaseResult.Content.Length;
             AddDuration(completedData, completedState);
             await trace.EmitAsync(
                 TraceEventNames.NodeCompleted,
@@ -423,15 +423,15 @@ public sealed class PatternExecutor
         string status) =>
         new()
         {
-            ["nodeId"] = node.Id,
-            ["stageId"] = node.StageId,
-            ["mode"] = modeName,
-            ["phase"] = phaseName,
-            ["phaseKind"] = node.PhaseKind.ToString().ToLowerInvariant(),
-            ["status"] = status,
-            ["dependencies"] = node.DependencyNodeIds,
-            ["contextNodeIds"] = node.ContextNodeIds,
-            ["inputNodeId"] = node.InputNodeId
+            [TracePayloadKeys.NodeId] = node.Id,
+            [TracePayloadKeys.StageId] = node.StageId,
+            [TracePayloadKeys.Mode] = modeName,
+            [TracePayloadKeys.Phase] = phaseName,
+            [TracePayloadKeys.PhaseKind] = node.PhaseKind.ToString().ToLowerInvariant(),
+            [TracePayloadKeys.Status] = status,
+            [TracePayloadKeys.Dependencies] = node.DependencyNodeIds,
+            [TracePayloadKeys.ContextNodeIds] = node.ContextNodeIds,
+            [TracePayloadKeys.InputNodeId] = node.InputNodeId
         };
 
     private static void AddDuration(
@@ -440,7 +440,7 @@ public sealed class PatternExecutor
     {
         if (state.StartedAt is not null && state.EndedAt is not null)
         {
-            data["durationMs"] = RuntimeDuration.GetMilliseconds(
+            data[TracePayloadKeys.DurationMs] = RuntimeDuration.GetMilliseconds(
                 state.StartedAt.Value,
                 state.EndedAt.Value);
         }
@@ -466,13 +466,13 @@ public sealed class PatternExecutor
         {
             var data = new Dictionary<string, object?>
                 {
-                    ["nodeId"] = state.NodeId,
-                    ["stageId"] = state.StageId,
-                    ["mode"] = state.ModeName,
-                    ["phase"] = state.PhaseName,
-                    ["phaseKind"] =
+                    [TracePayloadKeys.NodeId] = state.NodeId,
+                    [TracePayloadKeys.StageId] = state.StageId,
+                    [TracePayloadKeys.Mode] = state.ModeName,
+                    [TracePayloadKeys.Phase] = state.PhaseName,
+                    [TracePayloadKeys.PhaseKind] =
                         state.PhaseKind.ToString().ToLowerInvariant(),
-                    ["status"] = "cancelled"
+                    [TracePayloadKeys.Status] = "cancelled"
                 };
             AddDuration(data, state);
             await EmitNodeTerminalBestEffortAsync(

@@ -65,7 +65,7 @@ public sealed class DeclaredPlanExecutionEvaluator
 
             var tracedContext = GetDataStrings(
                 terminalEvent,
-                "contextNodeIds");
+                TracePayloadKeys.ContextNodeIds);
             if (!node.ContextNodeIds.SequenceEqual(
                     tracedContext,
                     StringComparer.Ordinal))
@@ -224,7 +224,7 @@ public sealed class DeclaredPlanExecutionEvaluator
             StringComparer.Ordinal);
         foreach (var traceEvent in events)
         {
-            var nodeId = GetDataString(traceEvent, "nodeId");
+            var nodeId = GetDataString(traceEvent, TracePayloadKeys.NodeId);
             if (string.IsNullOrWhiteSpace(nodeId))
             {
                 issues.Add(

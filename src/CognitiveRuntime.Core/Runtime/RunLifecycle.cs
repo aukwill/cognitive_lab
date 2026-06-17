@@ -129,9 +129,9 @@ internal static class RunTerminalTraceEventFactory
         };
         var data = new Dictionary<string, object?>
         {
-            ["fromStatus"] = ToTraceValue(state.LastTransition.From),
-            ["lifecycleStatus"] = ToTraceValue(state.LifecycleStatus),
-            ["outcome"] = ToTraceValue(state.Outcome.Value)
+            [TracePayloadKeys.FromStatus] = ToTraceValue(state.LastTransition.From),
+            [TracePayloadKeys.LifecycleStatus] = ToTraceValue(state.LifecycleStatus),
+            [TracePayloadKeys.Outcome] = ToTraceValue(state.Outcome.Value)
         };
 
         if (additionalData is not null)
